@@ -1,78 +1,80 @@
-# Hue Sensor Logger
+# HueMonitor
 
-Real-time motion detection and sensor logging for Philips Hue bridges with Pushover notifications.
+Real-time Philips Hue monitoring dashboard with sensor tracking, light control, and push notifications.
 
 ## Features
 
-- **Real-time event monitoring** - Instant motion detection via Hue Event Stream API
-- **Polling monitor** - Periodic sensor polling (fallback for older bridges)
-- **Organized logging** - Sensor data logged by category and name
-- **Pushover alerts** - Get notifications on motion detection (optional)
-- **Configurable alerts** - Set up alerts for motion, temperature, battery, and offline status
-- **Selective logging** - Log only specific sensor categories (motion, temperature, light, etc.)
+- **Web Dashboard** — Real-time sensor and light monitoring via WebSocket
+- **Light Control** — Toggle Hue lights on/off from the dashboard
+- **Setup Wizard** — Browser-based configuration when no settings exist
+- **Real-time Events** — Instant motion detection via Hue Event Stream API
+- **Push Notifications** — Pushover alerts on motion detection (optional)
+- **Auto-generated Alerts** — Alert rules created from discovered motion sensors on first run
+- **CLI Tools** — Sensor listing, monitoring, streaming, and logging from the command line
+- **Stats Dashboard** — Uptime, event counts, per-sensor breakdown, system status
+- **Synology NAS Support** — Ready for deployment on Synology NAS
 
-## Installation
+## Quick Start
 
 ### Requirements
+
 - Python 3.8+
 - Philips Hue Bridge on the same network
 
-### Setup
+### Install
 
-1. **Clone or download** the project
-2. **Install dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. **Run the app for the first time**:
-   ```bash
-   python main.py list
-   ```
-   - The app will discover your Hue Bridge automatically
-   - When prompted, **press the link button on your Hue Bridge** and press Enter
-   - Your bridge credentials are saved to `config/settings.json`
-
-## Usage
-
-### Commands
-
-#### Monitor in Real-Time (Recommended)
 ```bash
-python main.py stream
-```
-Connects to the Hue Event Stream for instant motion detection.
-
-Output:
-```
-============================================================
-🔔 MOTION DETECTED: Kitchen
-   Time: 14:32:15 | Date: 2026-01-18
-============================================================
-
-  >> Pushover alert sent
+pip install -r requirements.txt
 ```
 
-#### Polling Monitor
+### Run the Web Dashboard
+
 ```bash
-python main.py monitor -i 10    # Poll every 10 seconds (default: 30s)
+python main.py web
 ```
 
-#### Single Read
-```bash
-python main.py run               # Read sensors once
-python main.py run -q            # Quiet mode (no console output)
-```
+Open `http://localhost:8080` in your browser. If no configuration exists, the **setup wizard** will guide you through connecting to your Hue Bridge.
 
-#### List Sensors
-```bash
-python main.py list              # Show all current sensor values
-```
+## Web Dashboard
 
-#### View Configuration
+The dashboard has five tabs:
+
+- **Sensors** — Motion, temperature sensors with real-time activity log sidebar
+- **Lights** — All Hue lights with on/off toggle switches
+- **Other** — Switches, daylight sensors, and other devices
+- **Stats** — Server uptime, motion event counts, per-sensor breakdown, notifications sent, system info
+- **Settings** — Pushover config, API key management, server host/port/polling, restart
+
+All data updates in real-time via WebSocket — no manual refresh needed.
+
+### Setup Wizard
+
+When `config/settings.json` doesn't exist, the dashboard shows a step-by-step setup wizard:
+
+1. **Bridge IP** — Enter manually or click "Discover" to auto-detect
+2. **API Key** — Press the link button on your bridge, then click "Generate" (polls for 30 seconds)
+3. **Pushover** (optional) — Configure push notification keys, or skip
+4. **Test & Save** — Verify the connection and save
+
+After saving, restart the server to connect. You can also access the setup wizard at `/setup` and the dashboard at `/dashboard` directly.
+
+### Settings Tab
+
+- **Pushover** — Add/change push notification keys (masked by default), send a test notification
+- **API Key** — Generate a new Hue Bridge API key (press bridge link button first)
+- **Server Config** — Change host, port, and polling interval (saved to `settings.json`)
+- **Restart** — Restart the server from the browser after configuration changes
+
+## CLI Commands
+
 ```bash
-python main.py alerts            # Show configured alerts
-python main.py logs              # Show logged sensors
+python main.py web                  # Start web dashboard (recommended)
+python main.py stream               # Real-time motion stream (CLI)
+python main.py monitor -i 10        # Poll every 10 seconds
+python main.py run                  # Single sensor read
+python main.py list                 # Show all sensor values
+python main.py alerts               # Show configured alerts
+python main.py logs                 # Show logged sensors
 ```
 
 ### Logging Options
@@ -80,40 +82,35 @@ python main.py logs              # Show logged sensors
 By default, only motion sensors are logged. Control what gets logged:
 
 ```bash
-# Log only motion (default)
-python main.py run
-python main.py monitor
-
-# Log motion and temperature
 python main.py run --log "motion,temperature"
-
-# Log all categories
 python main.py run --log "motion,temperature,light,switch,daylight"
 ```
 
-Available categories: `motion`, `temperature`, `light`, `switch`, `daylight`, `other`
-
 ## Configuration
 
-### Pushover Notifications (Optional)
+### config/settings.json
 
-1. **Get your keys:**
-   - Pushover user key: https://pushover.net
-   - Create an app: https://pushover.net/apps/build
+Created automatically by the setup wizard, or manually:
 
-2. **Configure** `config/settings.json`:
-   ```json
-   {
-     "pushover": {
-       "user_key": "YOUR_USER_KEY",
-       "api_token": "YOUR_APP_TOKEN"
-     }
-   }
-   ```
+```json
+{
+  "bridge_ip": "192.168.1.100",
+  "api_key": "your-hue-api-key",
+  "pushover": {
+    "user_key": "your-pushover-user-key",
+    "api_token": "your-pushover-api-token"
+  },
+  "polling_interval": 30,
+  "web": {
+    "host": "0.0.0.0",
+    "port": 8080
+  }
+}
+```
 
-### Motion Alerts
+### config/alerts.json
 
-Edit `config/alerts.json` to set up motion notifications:
+Auto-generated from discovered motion sensors on first startup (all disabled by default). Use the dashboard toggles to enable/disable notifications per sensor, or edit manually:
 
 ```json
 {
@@ -131,94 +128,54 @@ Edit `config/alerts.json` to set up motion notifications:
 }
 ```
 
-**Alert Types:**
-- `presence` - Motion detected/cleared
-- `temperature` - Temperature above/below threshold
-- `battery` - Low battery warning
-- `offline` - Sensor goes unreachable
-
-**Priority Levels:**
-- `-2` - Silent (no notification)
-- `-1` - Low (quiet)
-- `0` - Normal
-- `1` - High (bypass quiet hours)
-- `2` - Emergency (requires acknowledgment)
+**Priority levels:** `-2` silent, `-1` low, `0` normal, `1` high, `2` emergency
 
 ## Project Structure
 
 ```
-APIHUE/
+HueMonitor/
 ├── app/
 │   ├── bridge.py           # Hue Bridge connection
 │   ├── sensors.py          # Sensor reading & parsing
+│   ├── lights.py           # Light reading & control
 │   ├── logger.py           # Organized logging
-│   ├── notifications.py    # Pushover alerts
-│   └── eventstream.py      # Real-time event stream
+│   ├── notifications.py    # Pushover alerts & alert manager
+│   ├── eventstream.py      # Real-time event stream (SSE)
+│   └── web.py              # FastAPI web server & WebSocket
+├── static/
+│   ├── index.html          # Dashboard (single-page app)
+│   └── setup.html          # Setup wizard
 ├── config/
 │   ├── settings.json       # Bridge IP, API key, Pushover creds
-│   └── alerts.json         # Alert rules
-├── logs/
-│   └── sensors/
-│       ├── motion/         # Motion sensor logs
-│       ├── temperature/    # Temperature sensor logs
-│       └── ...
-├── main.py                 # Main entry point
-└── README.md               # This file
+│   └── alerts.json         # Alert rules (auto-generated)
+├── logs/sensors/            # Sensor data logs by category
+├── main.py                 # CLI entry point
+├── start.sh                # Service management script (Synology/Linux)
+├── requirements.txt
+└── README.md
 ```
 
-## Log Format
+## Synology NAS Deployment
 
-Sensor logs are organized by category and name:
+Use `start.sh` to manage HueMonitor as a service:
 
-```
-logs/sensors/motion/Kitchen.json
-logs/sensors/temperature/Bedroom.json
-logs/sensors/light/Living_Room.json
+```bash
+./start.sh start     # Start in background
+./start.sh stop      # Stop the server
+./start.sh restart   # Restart
+./start.sh status    # Check if running
 ```
 
-Each file contains:
-```json
-{
-  "sensor_info": {
-    "id": "37",
-    "name": "Kitchen",
-    "type": "ZLLPresence",
-    "category": "motion"
-  },
-  "readings": [
-    {
-      "timestamp": "2026-01-18T14:32:15.123456",
-      "presence": true,
-      "battery": 95,
-      "reachable": true
-    }
-  ]
-}
-```
+For auto-start on boot: **Control Panel > Task Scheduler > Triggered Task > Boot-up**, set the command to `/path/to/HueMonitor/start.sh start`.
+
+Host and port are read from `config/settings.json`. Override with env vars: `HUE_HOST=0.0.0.0 HUE_PORT=9090 ./start.sh start`.
 
 ## Troubleshooting
 
-### Motion detection not working
-- Use `python main.py stream` instead of polling (real-time vs 30-second intervals)
-- Motion sensors only report `presence: true` for a few seconds
-- Check that alerts are enabled in `config/alerts.json`
-
-### No Pushover notifications
-- Verify credentials in `config/settings.json`
-- Run `python main.py alerts` to confirm alerts are enabled
-- Check alert cooldown - notifications won't repeat within the cooldown period
-
-### Bridge not found
-- Ensure bridge is on the same network
-- Try resetting bridge discovery by deleting `config/settings.json` and running `python main.py list` again
-
-## Supported Sensors
-
-- **Motion Sensors** - ZLLPresence (detect presence)
-- **Temperature Sensors** - ZLLTemperature (ambient temperature)
-- **Light Sensors** - ZLLLightLevel (ambient light level)
-- **Switches** - ZLLSwitch, ZGPSwitch (button events)
-- **Daylight Sensor** - Daylight (day/night indicator)
+- **Dashboard won't load** — Check that Python 3 and dependencies are installed. View `huemonitor.log` for errors.
+- **No sensor data** — Verify `bridge_ip` and `api_key` in `config/settings.json`. Ensure the device can reach the Hue Bridge.
+- **No push notifications** — Verify Pushover keys in Settings tab. Check that alerts are enabled in the dashboard.
+- **Setup wizard shows after setup** — The setup wizard appears when `config/settings.json` is missing or incomplete. If config exists, click "Go to Dashboard".
 
 ## License
 

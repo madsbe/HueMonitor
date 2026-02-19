@@ -230,12 +230,16 @@ def run_stream(bridge, logger, notifier):
 def main():
     parser = argparse.ArgumentParser(description="Hue Sensor Logger")
     parser.add_argument("command", nargs="?", default="run",
-                        choices=["run", "monitor", "stream", "list", "alerts", "logs"],
-                        help="Command to execute (stream = real-time event monitoring)")
+                        choices=["run", "monitor", "stream", "list", "alerts", "logs", "web"],
+                        help="Command to execute (web = dashboard, stream = real-time)")
     parser.add_argument("-i", "--interval", type=int, default=30,
                         help="Polling interval in seconds (default: 30)")
     parser.add_argument("-q", "--quiet", action="store_true",
                         help="Suppress console output")
+    parser.add_argument("--host", type=str, default=None,
+                        help="Web server host (default: from settings.json or 0.0.0.0)")
+    parser.add_argument("--port", type=int, default=None,
+                        help="Web server port (default: from settings.json or 8080)")
     parser.add_argument("--log", type=str, default="motion",
                         help="Sensor categories to log: motion,temperature,light,switch,daylight (default: motion)")
 
@@ -251,6 +255,11 @@ def main():
     bridge = HueBridge(CONFIG_DIR / "settings.json")
 
     # Handle non-connection commands first
+    if args.command == "web":
+        from app.web import start_server
+        start_server(host=args.host, port=args.port)
+        return
+
     if args.command == "alerts":
         cmd_list_alerts()
         return

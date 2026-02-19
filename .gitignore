@@ -1,38 +1,8 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-env/
-venv/
-.venv/
-ENV/
-build/
-dist/
-*.egg-info/
-*.egg
-
-# Config (contains API keys)
-config/
-
-# Secrets
-PUshover.key
-*.key
-
-# Logs
-logs/
-
-# Environment
-.env
-
-# IDE / tools
-.vscode/
-.idea/
-.claude/
-*.swp
-*.swo
-
-# OS
+huemonitor.log
+huemonitor.pid
 .DS_Store
-Thumbs.db
+__pycache__/
+config/
+logs/
+.claude/
+PUshover.key

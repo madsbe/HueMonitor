@@ -1,0 +1,1617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HueMonitor</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #232736;
+    --border: #2d3148;
+    --text: #e1e4ed;
+    --text-dim: #8b90a5;
+    --accent: #6c8aff;
+    --green: #4ade80;
+    --red: #f87171;
+    --orange: #fb923c;
+    --yellow: #fbbf24;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 12px;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 6px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .header-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .logo { flex-shrink: 0; }
+
+  header h1 { font-size: 14px; font-weight: 600; }
+
+  .status-badge {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  .status-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--red);
+  }
+  .status-dot.connected { background: var(--green); }
+  .status-dot.connecting { background: var(--yellow); animation: pulse 1s infinite; }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+  /* Main layout */
+  .app-layout {
+    height: calc(100vh - 31px);
+    overflow-y: auto;
+  }
+
+  .main-content {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 12px 32px;
+  }
+
+  /* Sensors tab: cards left, activity right */
+  .sensors-layout {
+    display: grid;
+    grid-template-columns: 1fr 240px;
+    gap: 14px;
+    align-items: start;
+  }
+
+  @media (max-width: 700px) {
+    .sensors-layout { grid-template-columns: 1fr; }
+  }
+
+  /* Activity log panel */
+  .activity-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 100px);
+    overflow: hidden;
+  }
+
+  .activity-header {
+    padding: 6px 8px 5px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .panel-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    border-radius: 4px;
+    padding: 2px 7px;
+    font-size: 12px;
+    cursor: pointer;
+    line-height: 1;
+    transition: color 0.2s, border-color 0.2s;
+  }
+
+  .panel-btn:hover {
+    color: var(--text);
+    border-color: var(--text-dim);
+  }
+
+  .activity-content {
+    overflow-y: auto;
+    flex: 1;
+    padding: 4px 8px;
+  }
+
+  /* Tabs */
+  .tab-bar {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    padding: 0 14px;
+    flex-shrink: 0;
+  }
+
+  .tab-btn {
+    padding: 7px 16px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-dim);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s;
+  }
+
+  .tab-btn:hover { color: var(--text); }
+
+  .tab-btn.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  .tab-count {
+    font-size: 9px;
+    color: var(--text-dim);
+    background: var(--surface2);
+    padding: 0 4px;
+    border-radius: 8px;
+    margin-left: 5px;
+    font-weight: 400;
+  }
+
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  .section-title {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-dim);
+    margin-bottom: 5px;
+  }
+
+  .sensor-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .sensor-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 14px 10px;
+    transition: border-color 0.3s;
+  }
+
+  .sensor-card.motion-active {
+    border-color: var(--orange);
+    box-shadow: 0 0 8px rgba(251,146,60,0.15);
+  }
+
+  .sensor-card.unreachable { opacity: 0.5; }
+
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+
+  .card-name { font-size: 13px; font-weight: 600; }
+
+  .card-category {
+    font-size: 9px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    background: var(--surface2);
+    padding: 1px 6px;
+    border-radius: 3px;
+  }
+
+  .card-value {
+    font-size: 22px;
+    font-weight: 700;
+    margin: 6px 0 4px;
+    line-height: 1;
+  }
+
+  .card-value.motion { color: var(--orange); }
+  .card-value.clear { color: var(--text-dim); font-size: 16px; }
+  .card-value.temp { color: var(--accent); }
+  .card-value.light { color: var(--yellow); }
+  .card-value.day { color: var(--yellow); }
+  .card-value.night { color: var(--accent); }
+
+  .card-last-activity {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 3px;
+  }
+
+  .card-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: 6px;
+    padding-top: 5px;
+    border-top: 1px solid var(--border);
+  }
+
+  .card-meta-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .battery-indicator { display: flex; align-items: center; gap: 3px; }
+
+  /* Light cards */
+  .light-status {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin: 6px 0 4px;
+  }
+
+  .light-state {
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .light-on { color: var(--yellow); }
+  .light-off { color: var(--text-dim); font-size: 16px; }
+
+  .light-brightness {
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  .light-toggle-wrap {
+    display: flex;
+    align-items: center;
+  }
+
+  .light-toggle-wrap .toggle {
+    width: 32px;
+    height: 18px;
+  }
+
+  .light-toggle-wrap .toggle-track {
+    border-radius: 9px;
+  }
+
+  .light-toggle-wrap .toggle-track::after {
+    width: 12px;
+    height: 12px;
+    top: 3px;
+    left: 3px;
+  }
+
+  .light-toggle-wrap .toggle input:checked + .toggle-track::after {
+    transform: translateX(14px);
+  }
+
+  .light-toggle-wrap .toggle input:checked + .toggle-track {
+    background: var(--yellow);
+  }
+
+  .battery-bar {
+    width: 14px; height: 7px;
+    border: 1px solid var(--text-dim);
+    border-radius: 2px;
+    position: relative;
+    overflow: hidden;
+  }
+  .battery-bar::after {
+    content: '';
+    position: absolute;
+    left: 1px; top: 1px; bottom: 1px;
+    width: var(--level);
+    background: var(--color);
+    border-radius: 1px;
+  }
+
+  /* Toggle switch */
+  .toggle {
+    position: relative;
+    width: 20px;
+    height: 11px;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+
+  .toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+  }
+
+  .toggle-track {
+    position: absolute;
+    inset: 0;
+    background: var(--surface2);
+    border-radius: 6px;
+    transition: background 0.2s;
+  }
+
+  .toggle input:checked + .toggle-track {
+    background: var(--green);
+  }
+
+  .toggle-track::after {
+    content: '';
+    position: absolute;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--text);
+    top: 2px;
+    left: 2px;
+    transition: transform 0.2s;
+  }
+
+  .toggle input:checked + .toggle-track::after {
+    transform: translateX(9px);
+  }
+
+  .toggle-saved {
+    font-size: 9px;
+    color: var(--green);
+    margin-left: 4px;
+    animation: savedFade 1.5s forwards;
+  }
+
+  .toggle-disabled-hint {
+    font-size: 9px;
+    color: var(--text-dim);
+    opacity: 0.6;
+    font-style: italic;
+  }
+
+  @keyframes savedFade {
+    0% { opacity: 1; }
+    70% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+
+  .alert-status {
+    font-size: 9px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-weight: 600;
+  }
+  .alert-status.on { background: rgba(74,222,128,0.15); color: var(--green); }
+  .alert-status.off { background: rgba(139,144,165,0.15); color: var(--text-dim); }
+
+  /* Alerts panel (inside main content) */
+  .alerts-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 3px 8px;
+  }
+
+  .alert-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 3px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 10px;
+  }
+  .alert-row:last-child { border-bottom: none; }
+
+  .alert-info { display: flex; align-items: center; gap: 6px; }
+  .alert-sensor { font-weight: 500; }
+  .alert-rule { color: var(--text-dim); font-size: 9px; }
+
+  /* Activity log entries in sidebar */
+  .log-entry {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    animation: fadeIn 0.3s;
+  }
+  .log-entry:last-child { border-bottom: none; }
+
+  @keyframes fadeIn { from{opacity:0;transform:translateY(-3px)} to{opacity:1;transform:translateY(0)} }
+
+  .log-icon {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .log-icon.detected { background: var(--orange); }
+  .log-icon.cleared { background: var(--text-dim); }
+
+  .log-time { color: var(--text-dim); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+  .log-name { font-weight: 500; }
+
+  .log-empty {
+    color: var(--text-dim);
+    font-size: 11px;
+    padding: 8px 0;
+    text-align: center;
+  }
+
+  /* Settings tab */
+  .settings-sections {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+  }
+
+  @media (max-width: 700px) {
+    .settings-sections { grid-template-columns: 1fr; }
+  }
+
+  .settings-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .settings-card.full-width {
+    grid-column: 1 / -1;
+  }
+
+  .settings-title {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .settings-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    flex-shrink: 0;
+  }
+
+  .settings-icon.push { background: rgba(108,138,255,0.15); color: var(--accent); }
+  .settings-icon.bridge { background: rgba(251,191,36,0.15); color: var(--yellow); }
+  .settings-icon.server { background: rgba(74,222,128,0.15); color: var(--green); }
+
+  .settings-desc {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+    line-height: 1.5;
+  }
+
+  .settings-desc code {
+    background: var(--surface2);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 11px;
+    color: var(--text);
+  }
+
+  .settings-field {
+    margin-bottom: 10px;
+  }
+
+  .settings-field label {
+    display: block;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+
+  .settings-field input {
+    width: 100%;
+    padding: 8px 10px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    color: var(--text);
+    font-size: 12px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .settings-field input:focus { border-color: var(--accent); }
+
+  .settings-grow { flex: 1; }
+
+  .settings-btns {
+    display: flex;
+    gap: 8px;
+    margin-top: auto;
+    padding-top: 12px;
+  }
+
+  .settings-btn {
+    padding: 7px 16px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--surface2);
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: opacity 0.2s, background 0.2s;
+  }
+
+  .settings-btn:hover { opacity: 0.85; }
+  .settings-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .settings-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .settings-btn.danger { background: rgba(248,113,113,0.15); color: var(--red); border-color: rgba(248,113,113,0.3); }
+  .settings-btn.danger:hover { background: var(--red); color: #fff; }
+
+  .settings-msg {
+    font-size: 11px;
+    margin-top: 8px;
+    min-height: 16px;
+  }
+
+  .settings-msg.ok { color: var(--green); }
+  .settings-msg.err { color: var(--red); }
+  .settings-msg.info { color: var(--accent); }
+
+  /* Stats tab */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+  }
+
+  @media (max-width: 700px) {
+    .stats-grid { grid-template-columns: 1fr; }
+  }
+
+  .stats-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px;
+  }
+
+  .stats-card.full-width { grid-column: 1 / -1; }
+
+  .stats-card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .stats-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    flex-shrink: 0;
+  }
+
+  .stats-icon.uptime { background: rgba(74,222,128,0.15); color: var(--green); }
+  .stats-icon.events { background: rgba(251,146,60,0.15); color: var(--orange); }
+  .stats-icon.notif { background: rgba(108,138,255,0.15); color: var(--accent); }
+  .stats-icon.system { background: rgba(251,191,36,0.15); color: var(--yellow); }
+
+  .stats-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-dim);
+  }
+
+  .stats-big {
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stats-sub {
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  .stats-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .stats-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 5px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+  }
+
+  .stats-row:last-child { border-bottom: none; }
+
+  .stats-row span:first-child { color: var(--text-dim); }
+  .stats-row span:last-child { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  .stats-breakdown {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .stats-sensor-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+  }
+
+  .stats-sensor-name {
+    width: 160px;
+    flex-shrink: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .stats-bar-wrap {
+    flex: 1;
+    height: 14px;
+    background: var(--surface2);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .stats-bar {
+    height: 100%;
+    background: var(--orange);
+    border-radius: 3px;
+    min-width: 2px;
+    transition: width 0.3s;
+  }
+
+  .stats-sensor-count {
+    width: 40px;
+    text-align: right;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-dim);
+  }
+
+  .spinner-sm {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border: 2px solid var(--text-dim);
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    vertical-align: middle;
+    margin-right: 4px;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-brand">
+    <svg class="logo" width="38" height="24" viewBox="0 0 80 48" fill="none">
+      <defs>
+        <radialGradient id="hglow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#fff" stop-opacity="0.95"/>
+          <stop offset="15%" stop-color="#fef3c7" stop-opacity="0.85"/>
+          <stop offset="40%" stop-color="#fbbf24" stop-opacity="0.5"/>
+          <stop offset="70%" stop-color="#fb923c" stop-opacity="0.15"/>
+          <stop offset="100%" stop-color="#fb923c" stop-opacity="0"/>
+        </radialGradient>
+        <radialGradient id="hhalo" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#fbbf24" stop-opacity="0.12"/>
+          <stop offset="100%" stop-color="#fbbf24" stop-opacity="0"/>
+        </radialGradient>
+        <linearGradient id="hflare" x1="0%" y1="50%" x2="100%" y2="50%">
+          <stop offset="0%" stop-color="#fbbf24" stop-opacity="0"/>
+          <stop offset="35%" stop-color="#fbbf24" stop-opacity="0.08"/>
+          <stop offset="50%" stop-color="#fef3c7" stop-opacity="0.35"/>
+          <stop offset="65%" stop-color="#fbbf24" stop-opacity="0.08"/>
+          <stop offset="100%" stop-color="#fbbf24" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <circle cx="40" cy="24" r="22" fill="url(#hhalo)"/>
+      <ellipse cx="40" cy="24" rx="39" ry="1.8" fill="url(#hflare)"/>
+      <path d="M6 24 C16 8, 64 8, 74 24 C64 40, 16 40, 6 24 Z" stroke="#6c8aff" stroke-width="2.5" fill="rgba(108,138,255,0.06)" stroke-linejoin="round"/>
+      <circle cx="40" cy="24" r="13" fill="url(#hglow)"/>
+      <circle cx="40" cy="24" r="6" fill="#fbbf24"/>
+      <circle cx="40" cy="24" r="2.5" fill="#fef3c7" opacity="0.9"/>
+    </svg>
+    <h1>HueMonitor</h1>
+  </div>
+  <div class="status-badge">
+    <span id="statusText">Connecting...</span>
+    <div class="status-dot connecting" id="statusDot"></div>
+  </div>
+</header>
+
+<div class="app-layout">
+  <!-- Left: main content -->
+  <div class="main-content">
+    <div class="tab-bar">
+      <button class="tab-btn active" data-tab="tabSensors">Sensors<span class="tab-count" id="sensorCount">0</span></button>
+      <button class="tab-btn" data-tab="tabLights">Lights<span class="tab-count" id="lightCount">0</span></button>
+      <button class="tab-btn" data-tab="tabOther">Other<span class="tab-count" id="otherCount">0</span></button>
+      <button class="tab-btn" data-tab="tabStats">Stats</button>
+      <button class="tab-btn" data-tab="tabSettings">Settings</button>
+    </div>
+
+    <!-- Tab: Sensors -->
+    <div class="tab-panel active" id="tabSensors" style="padding-top:10px">
+      <div class="sensors-layout">
+        <div>
+          <div id="motionSection" style="display:none">
+            <div class="section-title">Motion</div>
+            <div class="sensor-grid" id="motionGrid"></div>
+          </div>
+          <div id="temperatureSection" style="display:none">
+            <div class="section-title">Temperature</div>
+            <div class="sensor-grid" id="temperatureGrid"></div>
+          </div>
+
+          <div class="section-title" style="margin-bottom:3px">Alerts</div>
+          <div class="sensor-grid">
+            <div class="alerts-panel" id="alertsPanel" style="grid-column: span 3">
+              <div class="log-empty">Loading...</div>
+            </div>
+          </div>
+        </div>
+        <div class="activity-panel">
+          <div class="activity-header">
+            <span>Activity</span>
+            <button class="panel-btn" id="clearLogBtn" title="Clear log">&#x2715;</button>
+          </div>
+          <div class="activity-content" id="activityLog">
+            <div class="log-empty">Waiting for events...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: Lights -->
+    <div class="tab-panel" id="tabLights" style="padding-top:10px">
+      <div id="lightSection">
+        <div class="sensor-grid" id="lightGrid"></div>
+      </div>
+      <div class="log-empty" id="lightEmpty">No lights found</div>
+    </div>
+
+    <!-- Tab: Other -->
+    <div class="tab-panel" id="tabOther" style="padding-top:10px">
+      <div id="otherSection">
+        <div class="sensor-grid" id="otherGrid"></div>
+      </div>
+      <div class="log-empty" id="otherEmpty">No other sensors</div>
+    </div>
+
+    <!-- Tab: Stats -->
+    <div class="tab-panel" id="tabStats" style="padding-top:10px">
+      <div class="stats-grid">
+
+        <!-- Uptime -->
+        <div class="stats-card">
+          <div class="stats-card-header">
+            <span class="stats-icon uptime">&#x23F1;</span>
+            <span class="stats-label">Uptime</span>
+          </div>
+          <div class="stats-big" id="statUptime">--</div>
+          <div class="stats-sub">Started <span id="statStarted">--</span></div>
+        </div>
+
+        <!-- Events -->
+        <div class="stats-card">
+          <div class="stats-card-header">
+            <span class="stats-icon events">&#x26A1;</span>
+            <span class="stats-label">Motion Events</span>
+          </div>
+          <div class="stats-big" id="statEvents">0</div>
+          <div class="stats-sub">Since server start</div>
+        </div>
+
+        <!-- Notifications -->
+        <div class="stats-card">
+          <div class="stats-card-header">
+            <span class="stats-icon notif">&#x1F514;</span>
+            <span class="stats-label">Notifications Sent</span>
+          </div>
+          <div class="stats-big" id="statNotif">0</div>
+          <div class="stats-sub">Push alerts delivered</div>
+        </div>
+
+        <!-- System -->
+        <div class="stats-card">
+          <div class="stats-card-header">
+            <span class="stats-icon system">&#x2699;</span>
+            <span class="stats-label">System</span>
+          </div>
+          <div class="stats-rows">
+            <div class="stats-row"><span>Sensors</span><span id="statSensors">--</span></div>
+            <div class="stats-row"><span>Lights</span><span id="statLights">--</span></div>
+            <div class="stats-row"><span>WebSocket Clients</span><span id="statClients">--</span></div>
+            <div class="stats-row"><span>Poll Cycles</span><span id="statPolls">--</span></div>
+            <div class="stats-row"><span>Poll Interval</span><span id="statInterval">--</span></div>
+            <div class="stats-row"><span>Last Poll</span><span id="statLastPoll">--</span></div>
+            <div class="stats-row"><span>Bridge</span><span id="statBridge">--</span></div>
+            <div class="stats-row"><span>Pushover</span><span id="statPushover">--</span></div>
+          </div>
+        </div>
+
+        <!-- Events by Sensor -->
+        <div class="stats-card full-width">
+          <div class="stats-card-header">
+            <span class="stats-icon events">&#x1F4CA;</span>
+            <span class="stats-label">Events by Sensor</span>
+          </div>
+          <div id="statSensorBreakdown" class="stats-breakdown">
+            <div class="stats-sub">No events yet</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Tab: Settings -->
+    <div class="tab-panel" id="tabSettings" style="padding-top:10px">
+      <div class="settings-sections">
+
+        <!-- Pushover -->
+        <div class="settings-card">
+          <h3 class="settings-title"><span class="settings-icon push">&#x1F514;</span> Push Notifications</h3>
+          <p class="settings-desc">Configure Pushover for mobile alerts when motion is detected.</p>
+          <div class="settings-grow">
+            <div class="settings-field">
+              <label>User Key</label>
+              <div style="display:flex;gap:6px;align-items:center">
+                <input type="password" id="settPushUser" placeholder="Your Pushover user key" style="flex:1">
+                <button class="settings-btn" style="padding:4px 8px;min-width:auto;font-size:12px;opacity:0.5" onclick="togglePushVisibility(this,'settPushUser')" title="Show/hide">&#x1F441;</button>
+              </div>
+            </div>
+            <div class="settings-field">
+              <label>API Token</label>
+              <div style="display:flex;gap:6px;align-items:center">
+                <input type="password" id="settPushToken" placeholder="Your Pushover app token" style="flex:1">
+                <button class="settings-btn" style="padding:4px 8px;min-width:auto;font-size:12px;opacity:0.5" onclick="togglePushVisibility(this,'settPushToken')" title="Show/hide">&#x1F441;</button>
+              </div>
+            </div>
+          </div>
+          <div class="settings-btns">
+            <button class="settings-btn" id="settPushTestBtn" onclick="testPushover()">Test</button>
+            <button class="settings-btn primary" id="settPushSaveBtn" onclick="savePushover()">Save</button>
+          </div>
+          <div class="settings-msg" id="settPushMsg"></div>
+        </div>
+
+        <!-- API Key -->
+        <div class="settings-card">
+          <h3 class="settings-title"><span class="settings-icon bridge">&#x1F517;</span> Hue Bridge</h3>
+          <p class="settings-desc">Current key: <code id="settApiKeyMasked">--</code></p>
+          <div class="settings-grow">
+            <div class="settings-field">
+              <label>Bridge IP</label>
+              <input type="text" id="settBridgeIp" placeholder="192.168.1.100" readonly style="opacity:0.7">
+            </div>
+            <p class="settings-desc" style="margin-top:4px">Press the <strong>link button</strong> on your Hue Bridge, then click Generate.</p>
+          </div>
+          <div class="settings-btns">
+            <button class="settings-btn primary" id="settGenKeyBtn" onclick="generateKey()">Generate New Key</button>
+          </div>
+          <div class="settings-msg" id="settKeyMsg"></div>
+        </div>
+
+        <!-- Server -->
+        <div class="settings-card full-width">
+          <h3 class="settings-title"><span class="settings-icon server">&#x2699;</span> Server Configuration</h3>
+          <p class="settings-desc">Web server bind address, port, and sensor polling interval. Changes require a restart to take effect.</p>
+          <div style="display:flex;gap:12px;flex-wrap:wrap">
+            <div class="settings-field" style="flex:1;min-width:120px">
+              <label>Host</label>
+              <input type="text" id="settHost" placeholder="0.0.0.0">
+            </div>
+            <div class="settings-field" style="width:100px">
+              <label>Port</label>
+              <input type="number" id="settPort" placeholder="8080" min="1" max="65535">
+            </div>
+            <div class="settings-field" style="width:100px">
+              <label>Poll (sec)</label>
+              <input type="number" id="settPoll" placeholder="30" min="5" max="300">
+            </div>
+          </div>
+          <div class="settings-btns">
+            <button class="settings-btn primary" id="settServerSaveBtn" onclick="saveServerSettings()">Save</button>
+            <button class="settings-btn danger" id="settRestartBtn" onclick="restartServer()">Restart Server</button>
+          </div>
+          <div class="settings-msg" id="settRestartMsg"></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  let ws = null;
+  let reconnectTimer = null;
+  const RECONNECT_DELAY = 3000;
+  const lastActivity = {};
+  let alertRules = {};
+  let justSaved = null; // sensor name that was just toggled
+  let pushoverEnabled = false;
+
+  // --- Tabs ---
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById(btn.dataset.tab).classList.add('active');
+    });
+  });
+
+  // --- Clear Activity Log ---
+  document.getElementById('clearLogBtn').addEventListener('click', () => {
+    const log = document.getElementById('activityLog');
+    log.innerHTML = '<div class="log-empty">Log cleared</div>';
+  });
+
+  // --- WebSocket ---
+  function connect() {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(`${proto}//${location.host}/ws`);
+
+    ws.onopen = () => {
+      setStatus('connected', 'Connected');
+      if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    };
+
+    ws.onmessage = (e) => {
+      const msg = JSON.parse(e.data);
+      if (msg.type === 'sensor_update') renderSensors(msg.data);
+      else if (msg.type === 'lights_update') renderLights(msg.data);
+      else if (msg.type === 'motion_event') addEvent(msg.data);
+      else if (msg.type === 'events_init') initEvents(msg.data);
+      else if (msg.type === 'alerts_update') updateAlertState(msg.data);
+    };
+
+    ws.onclose = () => {
+      setStatus('connecting', 'Reconnecting...');
+      reconnectTimer = setTimeout(connect, RECONNECT_DELAY);
+    };
+
+    ws.onerror = () => ws.close();
+  }
+
+  function setStatus(s, text) {
+    document.getElementById('statusDot').className = 'status-dot ' + s;
+    document.getElementById('statusText').textContent = text;
+  }
+
+  // --- Toggle API ---
+  async function toggleAlert(sensorName, wrap) {
+    justSaved = sensorName;
+    try {
+      const resp = await fetch('/api/alerts/toggle/' + encodeURIComponent(sensorName), { method: 'POST' });
+      if (resp.ok) showSavedFlash(wrap);
+    } catch (e) { console.error('Toggle error:', e); }
+  }
+
+  function showSavedFlash(container) {
+    if (!container) return;
+    const old = container.querySelector('.toggle-saved');
+    if (old) old.remove();
+    const saved = el('span', 'toggle-saved', 'Saved');
+    container.appendChild(saved);
+    setTimeout(() => saved.remove(), 1500);
+  }
+
+  function makeToggle(sensorName) {
+    const alert = alertRules[sensorName];
+    const wrap = el('div');
+    wrap.style.display = 'flex';
+    wrap.style.alignItems = 'center';
+    wrap.style.gap = '6px';
+
+    if (!pushoverEnabled) {
+      const hint = el('span', 'toggle-disabled-hint', 'No Pushover');
+      wrap.appendChild(hint);
+      return wrap;
+    }
+
+    const label = el('label', 'toggle');
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.checked = alert ? alert.enabled !== false : true;
+    input.addEventListener('change', () => toggleAlert(sensorName, wrap));
+    const track = el('div', 'toggle-track');
+    label.appendChild(input);
+    label.appendChild(track);
+    label.title = input.checked ? 'Notifications ON' : 'Notifications OFF';
+    wrap.appendChild(label);
+    return wrap;
+  }
+
+  // --- Render Sensors ---
+  function renderSensors(grouped) {
+    const motion = grouped.motion || [];
+    const temperature = grouped.temperature || [];
+
+    renderCategory('motion', motion, renderMotionCard);
+    renderCategory('temperature', temperature, renderTempCard);
+
+    const other = [];
+    for (const cat of Object.keys(grouped)) {
+      if (!['motion','temperature'].includes(cat)) other.push(...grouped[cat]);
+    }
+    renderOtherTab(other);
+
+    document.getElementById('sensorCount').textContent = motion.length + temperature.length;
+    document.getElementById('otherCount').textContent = other.length;
+  }
+
+  // --- Render Lights ---
+  function renderLights(lights) {
+    const grid = document.getElementById('lightGrid');
+    const empty = document.getElementById('lightEmpty');
+    grid.innerHTML = '';
+    document.getElementById('lightCount').textContent = lights.length;
+    if (!lights.length) { empty.style.display = 'block'; return; }
+    empty.style.display = 'none';
+    lights.forEach(l => grid.appendChild(renderHueLightCard(l)));
+  }
+
+  function renderHueLightCard(l) {
+    const card = el('div', 'sensor-card' + (l.reachable === false ? ' unreachable' : ''));
+    card.id = 'light-' + l.id;
+
+    // Header: name + type badge
+    const header = el('div', 'card-header');
+    header.appendChild(el('div', 'card-name', l.name));
+    const badge = el('div', 'card-category', l.category || l.type);
+    header.appendChild(badge);
+    card.appendChild(header);
+
+    // On/Off status + brightness
+    const statusRow = el('div', 'light-status');
+    const statusText = l.on ? 'ON' : 'OFF';
+    const statusEl = el('span', 'light-state ' + (l.on ? 'light-on' : 'light-off'), statusText);
+    statusRow.appendChild(statusEl);
+
+    if (l.brightness != null && l.on) {
+      statusRow.appendChild(el('span', 'light-brightness', l.brightness + '%'));
+    }
+    card.appendChild(statusRow);
+
+    // Color temp or color info
+    if (l.on && l.ct_kelvin != null) {
+      card.appendChild(el('div', 'card-last-activity', l.ct_kelvin + 'K'));
+    }
+
+    // Footer: toggle switch
+    const meta = el('div', 'card-meta');
+    const left = el('div', 'card-meta-left');
+    if (l.reachable === false) {
+      left.appendChild(el('span', '', 'Unreachable'));
+    } else {
+      left.appendChild(el('span', '', l.model || ''));
+    }
+    meta.appendChild(left);
+
+    // Toggle switch
+    const wrap = el('div', 'light-toggle-wrap');
+    const label = el('label', 'toggle');
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.checked = l.on;
+    input.addEventListener('change', () => toggleLight(l.id, card));
+    const track = el('div', 'toggle-track');
+    label.appendChild(input);
+    label.appendChild(track);
+    label.title = l.on ? 'Turn OFF' : 'Turn ON';
+    wrap.appendChild(label);
+    meta.appendChild(wrap);
+
+    card.appendChild(meta);
+    return card;
+  }
+
+  async function toggleLight(lightId, card) {
+    try {
+      const resp = await fetch('/api/lights/' + encodeURIComponent(lightId) + '/toggle', { method: 'POST' });
+      if (!resp.ok) console.error('Toggle light error:', resp.status);
+    } catch (e) {
+      console.error('Toggle light error:', e);
+    }
+  }
+
+  function renderCategory(name, sensors, cardFn) {
+    const section = document.getElementById(name + 'Section');
+    const grid = document.getElementById(name + 'Grid');
+    if (!sensors.length) { section.style.display = 'none'; return; }
+    section.style.display = 'block';
+    grid.innerHTML = '';
+    sensors.forEach(s => grid.appendChild(cardFn(s)));
+  }
+
+
+  function renderOtherTab(sensors) {
+    const grid = document.getElementById('otherGrid');
+    const empty = document.getElementById('otherEmpty');
+    grid.innerHTML = '';
+    if (!sensors.length) { empty.style.display = 'block'; return; }
+    empty.style.display = 'none';
+    sensors.forEach(s => grid.appendChild(renderOtherCard(s)));
+  }
+
+  function renderMotionCard(s) {
+    const active = s.presence;
+    const card = makeCard(s, active ? 'motion-active' : '');
+    card.appendChild(el('div', 'card-value ' + (active ? 'motion' : 'clear'), active ? 'MOTION' : 'Clear'));
+    card.appendChild(makeLastActivity(s.name));
+    card.appendChild(makeMeta(s));
+    return card;
+  }
+
+  function renderTempCard(s) {
+    const card = makeCard(s);
+    card.appendChild(el('div', 'card-value temp', s.temperature != null ? s.temperature.toFixed(1) + '\u00B0C' : '--'));
+    card.appendChild(makeLastActivity(s.name));
+    card.appendChild(makeMeta(s));
+    return card;
+  }
+
+
+  function renderOtherCard(s) {
+    const card = makeCard(s);
+    let text = s.type || 'Unknown';
+    let cls = 'card-value';
+    if (s.category === 'daylight') { cls += ' ' + (s.daylight ? 'day' : 'night'); text = s.daylight ? 'Day' : 'Night'; }
+    else if (s.category === 'switch') { text = s.button_event != null ? 'Evt:' + s.button_event : 'Idle'; }
+    const val = el('div', cls, text);
+    val.style.fontSize = '13px';
+    card.appendChild(val);
+    card.appendChild(makeMeta(s));
+    return card;
+  }
+
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text) e.textContent = text;
+    return e;
+  }
+
+  function makeCard(s, extraClass) {
+    const card = el('div', 'sensor-card' + (extraClass ? ' ' + extraClass : '') + (s.reachable === false ? ' unreachable' : ''));
+    card.id = 'sensor-' + s.id;
+    const header = el('div', 'card-header');
+    header.appendChild(el('div', 'card-name', s.name));
+    header.appendChild(el('div', 'card-category', s.category));
+    card.appendChild(header);
+    return card;
+  }
+
+  function makeLastActivity(sensorName) {
+    const div = el('div', 'card-last-activity');
+    const la = lastActivity[sensorName];
+    div.textContent = la ? 'Last: ' + la : '';
+    return div;
+  }
+
+  function makeMeta(s) {
+    const meta = el('div', 'card-meta');
+    const left = el('div', 'card-meta-left');
+
+    if (s.reachable === false) {
+      const off = el('span', null, 'Offline');
+      off.style.color = 'var(--red)';
+      left.appendChild(off);
+    } else {
+      const updated = el('span');
+      if (s.last_updated) {
+        const t = s.last_updated.split('T');
+        updated.textContent = t.length > 1 ? t[1].substring(0, 8) : s.last_updated;
+      } else {
+        updated.textContent = '--:--:--';
+      }
+      left.appendChild(updated);
+    }
+
+    if (s.battery != null) {
+      const bat = el('div', 'battery-indicator');
+      const level = Math.max(0, Math.min(100, s.battery));
+      const color = level > 50 ? 'var(--green)' : level > 20 ? 'var(--yellow)' : 'var(--red)';
+      const bar = el('div', 'battery-bar');
+      bar.style.setProperty('--level', (level * 0.9) + '%');
+      bar.style.setProperty('--color', color);
+      bat.appendChild(bar);
+      bat.appendChild(el('span', null, level + '%'));
+      left.appendChild(bat);
+    }
+
+    meta.appendChild(left);
+    return meta;
+  }
+
+  // --- Alert state ---
+  function updateAlertState(data) {
+    alertRules = {};
+    (data.sensors || []).forEach(a => { alertRules[a.sensor_name] = a; });
+    renderAlerts(data.sensors || []);
+  }
+
+  // --- Events ---
+  function initEvents(events) {
+    if (events) {
+      events.forEach(ev => {
+        if (ev.motion && !lastActivity[ev.sensor_name]) {
+          lastActivity[ev.sensor_name] = ev.time || ev.timestamp.split('T')[1].substring(0, 8);
+        }
+      });
+    }
+    renderEvents(events);
+  }
+
+  function renderEvents(events) {
+    const log = document.getElementById('activityLog');
+    log.innerHTML = '';
+    if (!events || !events.length) {
+      log.innerHTML = '<div class="log-empty">No recent events</div>';
+      return;
+    }
+    events.forEach(ev => log.appendChild(makeLogEntry(ev)));
+  }
+
+  function addEvent(ev) {
+    if (ev.motion) {
+      lastActivity[ev.sensor_name] = ev.time || ev.timestamp.split('T')[1].substring(0, 8);
+    }
+
+    const log = document.getElementById('activityLog');
+    const empty = log.querySelector('.log-empty');
+    if (empty) empty.remove();
+
+    log.prepend(makeLogEntry(ev));
+    while (log.children.length > 100) log.removeChild(log.lastChild);
+
+    document.querySelectorAll('.sensor-card').forEach(card => {
+      const nameEl = card.querySelector('.card-name');
+      if (nameEl && nameEl.textContent === ev.sensor_name) {
+        card.classList.add('motion-active');
+        setTimeout(() => { if (!ev.motion) card.classList.remove('motion-active'); }, 2000);
+        if (ev.motion) {
+          const la = card.querySelector('.card-last-activity');
+          if (la) la.textContent = 'Last: ' + (ev.time || ev.timestamp.split('T')[1].substring(0, 8));
+        }
+      }
+    });
+  }
+
+  function makeLogEntry(ev) {
+    const entry = el('div', 'log-entry');
+    entry.appendChild(el('div', 'log-icon ' + (ev.motion ? 'detected' : 'cleared')));
+    entry.appendChild(el('span', 'log-time', ev.time || ev.timestamp.split('T')[1].substring(0, 8)));
+    entry.appendChild(el('span', 'log-name', ev.sensor_name));
+    const st = el('span', null, ev.motion ? 'Motion' : 'Cleared');
+    st.style.color = ev.motion ? 'var(--orange)' : 'var(--text-dim)';
+    entry.appendChild(st);
+    return entry;
+  }
+
+  // --- Alerts Panel ---
+  async function loadAlerts() {
+    try {
+      const resp = await fetch('/api/alerts');
+      const data = await resp.json();
+      pushoverEnabled = !!data.pushover_enabled;
+      alertRules = {};
+      (data.sensors || []).forEach(a => { alertRules[a.sensor_name] = a; });
+      renderAlerts(data.sensors || []);
+    } catch (e) { console.error('Failed to load alerts:', e); }
+  }
+
+  function renderAlerts(alerts) {
+    const panel = document.getElementById('alertsPanel');
+    panel.innerHTML = '';
+    if (!alerts.length) { panel.innerHTML = '<div class="log-empty">No alerts configured</div>'; return; }
+
+    alerts.forEach(a => {
+      const row = el('div', 'alert-row');
+      const info = el('div', 'alert-info');
+      info.appendChild(el('span', 'alert-sensor', a.sensor_name));
+      let r = a.type;
+      if (a.condition) r += ' \u2192 ' + a.condition;
+      if (a.cooldown) r += ' (' + a.cooldown + 'm)';
+      info.appendChild(el('span', 'alert-rule', r));
+      row.appendChild(info);
+      const toggle = makeToggle(a.sensor_name);
+      if (justSaved === a.sensor_name) {
+        const saved = el('span', 'toggle-saved', 'Saved');
+        toggle.appendChild(saved);
+        setTimeout(() => saved.remove(), 1500);
+        justSaved = null;
+      }
+      row.appendChild(toggle);
+      panel.appendChild(row);
+    });
+  }
+
+  // --- Settings Tab ---
+  async function loadSettings() {
+    try {
+      const resp = await fetch('/api/settings');
+      const data = await resp.json();
+      document.getElementById('settPushUser').value = data.pushover_user_key || '';
+      document.getElementById('settPushToken').value = data.pushover_api_token || '';
+      document.getElementById('settApiKeyMasked').textContent = data.api_key_masked || '--';
+      document.getElementById('settBridgeIp').value = data.bridge_ip || '';
+      document.getElementById('settHost').value = data.web_host || '0.0.0.0';
+      document.getElementById('settPort').value = data.web_port || 8080;
+      document.getElementById('settPoll').value = data.polling_interval || 30;
+    } catch (e) { console.error('Load settings error:', e); }
+  }
+
+  function settMsg(id, text, cls) {
+    const m = document.getElementById(id);
+    m.textContent = text;
+    m.className = 'settings-msg ' + cls;
+  }
+
+  window.togglePushVisibility = function(btn, inputId) {
+    const inp = document.getElementById(inputId);
+    if (inp.type === 'password') { inp.type = 'text'; btn.style.opacity = '1'; }
+    else { inp.type = 'password'; btn.style.opacity = '0.5'; }
+  };
+
+  window.savePushover = async function() {
+    const btn = document.getElementById('settPushSaveBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-sm"></span>Saving...';
+    try {
+      const resp = await fetch('/api/settings/pushover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_key: document.getElementById('settPushUser').value.trim(),
+          api_token: document.getElementById('settPushToken').value.trim(),
+        }),
+      });
+      const data = await resp.json();
+      if (data.success) {
+        pushoverEnabled = data.enabled;
+        settMsg('settPushMsg', data.enabled ? 'Saved — notifications enabled' : 'Saved — notifications disabled (keys cleared)', 'ok');
+        // Re-render alerts panel so toggles appear/disappear
+        loadAlerts();
+      } else {
+        settMsg('settPushMsg', data.error || 'Save failed', 'err');
+      }
+    } catch (e) { settMsg('settPushMsg', 'Error: ' + e.message, 'err'); }
+    btn.disabled = false;
+    btn.textContent = 'Save';
+  };
+
+  window.testPushover = async function() {
+    const btn = document.getElementById('settPushTestBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-sm"></span>Sending...';
+    try {
+      const resp = await fetch('/api/settings/pushover/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_key: document.getElementById('settPushUser').value.trim(),
+          api_token: document.getElementById('settPushToken').value.trim(),
+        }),
+      });
+      const data = await resp.json();
+      settMsg('settPushMsg', data.success ? 'Test notification sent!' : (data.error || 'Test failed'), data.success ? 'ok' : 'err');
+    } catch (e) { settMsg('settPushMsg', 'Error: ' + e.message, 'err'); }
+    btn.disabled = false;
+    btn.textContent = 'Test';
+  };
+
+  window.generateKey = async function() {
+    const btn = document.getElementById('settGenKeyBtn');
+    const ip = document.getElementById('settBridgeIp').value.trim();
+    if (!ip) { settMsg('settKeyMsg', 'No bridge IP configured', 'err'); return; }
+    btn.disabled = true;
+    const maxAttempts = 15;
+    const interval = 2000;
+
+    for (let i = maxAttempts; i > 0; i--) {
+      btn.innerHTML = '<span class="spinner-sm"></span>' + i * 2 + 's...';
+      settMsg('settKeyMsg', 'Press the link button on your Hue Bridge now... (' + i * 2 + 's)', 'info');
+      try {
+        const resp = await fetch('/api/settings/generate-key', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bridge_ip: ip }),
+        });
+        const data = await resp.json();
+        if (data.success) {
+          const masked = data.api_key.substring(0, 6) + '...' + data.api_key.substring(data.api_key.length - 4);
+          document.getElementById('settApiKeyMasked').textContent = masked;
+          settMsg('settKeyMsg', 'New API key generated and saved! Restart to apply.', 'ok');
+          btn.disabled = false;
+          btn.textContent = 'Generate New Key';
+          return;
+        }
+      } catch (e) { /* retry */ }
+      await new Promise(r => setTimeout(r, interval));
+    }
+
+    settMsg('settKeyMsg', 'Timed out. Press the link button before clicking Generate.', 'err');
+    btn.disabled = false;
+    btn.textContent = 'Generate New Key';
+  };
+
+  window.saveServerSettings = async function() {
+    const btn = document.getElementById('settServerSaveBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-sm"></span>Saving...';
+    try {
+      const resp = await fetch('/api/settings/server', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          host: document.getElementById('settHost').value.trim(),
+          port: parseInt(document.getElementById('settPort').value) || 8080,
+          polling_interval: parseInt(document.getElementById('settPoll').value) || 30,
+        }),
+      });
+      const data = await resp.json();
+      if (data.success) {
+        settMsg('settRestartMsg', 'Saved. Restart to apply changes.', 'ok');
+      } else {
+        settMsg('settRestartMsg', data.error || 'Save failed', 'err');
+      }
+    } catch (e) { settMsg('settRestartMsg', 'Error: ' + e.message, 'err'); }
+    btn.disabled = false;
+    btn.textContent = 'Save';
+  };
+
+  window.restartServer = async function() {
+    const btn = document.getElementById('settRestartBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-sm"></span>Restarting...';
+    settMsg('settRestartMsg', 'Sending restart signal...', 'info');
+    try {
+      await fetch('/api/restart', { method: 'POST' });
+    } catch (e) { /* expected - server is shutting down */ }
+    settMsg('settRestartMsg', 'Server is restarting. Reconnecting in 5s...', 'info');
+    setTimeout(() => { window.location.reload(); }, 5000);
+  };
+
+  // --- Stats Tab ---
+  let statsStartedAt = null;
+  let uptimeInterval = null;
+
+  function formatUptime(seconds) {
+    const d = Math.floor(seconds / 86400);
+    const h = Math.floor((seconds % 86400) / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    if (d > 0) return d + 'd ' + h + 'h ' + m + 'm';
+    if (h > 0) return h + 'h ' + m + 'm ' + s + 's';
+    return m + 'm ' + s + 's';
+  }
+
+  function updateUptimeDisplay() {
+    if (!statsStartedAt) return;
+    const elapsed = Math.floor((Date.now() - statsStartedAt.getTime()) / 1000);
+    document.getElementById('statUptime').textContent = formatUptime(elapsed);
+  }
+
+  async function loadStats() {
+    try {
+      const resp = await fetch('/api/stats');
+      const d = await resp.json();
+
+      statsStartedAt = new Date(d.started_at);
+      const startStr = statsStartedAt.toLocaleString();
+      document.getElementById('statStarted').textContent = startStr;
+      updateUptimeDisplay();
+
+      document.getElementById('statEvents').textContent = d.total_events;
+      document.getElementById('statNotif').textContent = d.notifications_sent;
+      document.getElementById('statSensors').textContent = d.sensor_count;
+      document.getElementById('statLights').textContent = d.light_count;
+      document.getElementById('statClients').textContent = d.connected_clients;
+      document.getElementById('statPolls').textContent = d.poll_count;
+      document.getElementById('statInterval').textContent = d.polling_interval + 's';
+      document.getElementById('statLastPoll').textContent = d.last_poll
+        ? new Date(d.last_poll).toLocaleTimeString() : 'Never';
+      document.getElementById('statBridge').textContent = d.bridge_connected ? 'Connected' : 'Disconnected';
+      document.getElementById('statBridge').style.color = d.bridge_connected ? 'var(--green)' : 'var(--red)';
+      document.getElementById('statPushover').textContent = d.pushover_enabled ? 'Enabled' : 'Disabled';
+      document.getElementById('statPushover').style.color = d.pushover_enabled ? 'var(--green)' : 'var(--text-dim)';
+
+      // Events by sensor breakdown
+      const breakdown = document.getElementById('statSensorBreakdown');
+      const entries = Object.entries(d.events_by_sensor || {}).sort((a, b) => b[1] - a[1]);
+      if (!entries.length) {
+        breakdown.innerHTML = '<div class="stats-sub">No events yet</div>';
+        return;
+      }
+      const maxCount = entries[0][1];
+      breakdown.innerHTML = '';
+      entries.forEach(([name, count]) => {
+        const row = el('div', 'stats-sensor-row');
+        row.appendChild(el('span', 'stats-sensor-name', name));
+        const barWrap = el('div', 'stats-bar-wrap');
+        const bar = el('div', 'stats-bar');
+        bar.style.width = Math.round((count / maxCount) * 100) + '%';
+        barWrap.appendChild(bar);
+        row.appendChild(barWrap);
+        row.appendChild(el('span', 'stats-sensor-count', String(count)));
+        breakdown.appendChild(row);
+      });
+    } catch (e) { console.error('Load stats error:', e); }
+  }
+
+  // Load stats when Stats tab is opened + start uptime ticker
+  document.querySelector('[data-tab="tabStats"]').addEventListener('click', () => {
+    loadStats();
+    if (!uptimeInterval) {
+      uptimeInterval = setInterval(updateUptimeDisplay, 1000);
+    }
+  });
+
+  // Load settings when Settings tab is opened
+  document.querySelector('[data-tab="tabSettings"]').addEventListener('click', loadSettings);
+
+  connect();
+  loadAlerts();
+})();
+</script>
+</body>
+</html>

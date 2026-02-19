@@ -2,10 +2,13 @@
 
 import json
 import requests
-import urllib3
 from datetime import datetime
 
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+try:
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+except (ImportError, AttributeError):
+    pass
 
 
 class HueEventStream:

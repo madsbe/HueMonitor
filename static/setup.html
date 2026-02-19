@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HueMonitor Setup</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #232736;
+    --border: #2d3148;
+    --text: #e1e4ed;
+    --text-dim: #8b90a5;
+    --accent: #6c8aff;
+    --green: #4ade80;
+    --red: #f87171;
+    --orange: #fb923c;
+    --yellow: #fbbf24;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .setup-container {
+    max-width: 520px;
+    width: 100%;
+    padding: 40px 24px;
+  }
+
+  .setup-header {
+    text-align: center;
+    margin-bottom: 32px;
+  }
+
+  .setup-header h1 {
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+
+  .setup-header p {
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+
+  /* Steps indicator */
+  .steps {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 28px;
+  }
+
+  .step-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    transition: all 0.3s;
+  }
+
+  .step-dot.active {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+
+  .step-dot.done {
+    background: var(--green);
+    border-color: var(--green);
+  }
+
+  /* Card */
+  .step-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 24px;
+    display: none;
+  }
+
+  .step-card.active { display: block; }
+
+  .step-card h2 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .step-card .subtitle {
+    color: var(--text-dim);
+    font-size: 12px;
+    margin-bottom: 18px;
+  }
+
+  /* Form elements */
+  .field {
+    margin-bottom: 14px;
+  }
+
+  .field label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-dim);
+    margin-bottom: 5px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .field input {
+    width: 100%;
+    padding: 9px 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 13px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .field input:focus {
+    border-color: var(--accent);
+  }
+
+  .field input::placeholder {
+    color: var(--text-dim);
+    opacity: 0.5;
+  }
+
+  .field-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+  }
+
+  .field-row .field { flex: 1; margin-bottom: 0; }
+
+  .hint {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 5px;
+    line-height: 1.5;
+  }
+
+  .hint a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  .hint a:hover { text-decoration: underline; }
+
+  .instructions {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    margin: 12px 0;
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--text-dim);
+  }
+
+  .instructions ol {
+    padding-left: 18px;
+  }
+
+  .instructions code {
+    background: var(--surface2);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 11px;
+    color: var(--text);
+  }
+
+  /* Buttons */
+  .btn {
+    padding: 9px 18px;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: opacity 0.2s, background 0.2s;
+  }
+
+  .btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  .btn-primary:hover:not(:disabled) { opacity: 0.85; }
+
+  .btn-secondary {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  .btn-secondary:hover:not(:disabled) {
+    border-color: var(--text-dim);
+  }
+
+  .btn-small {
+    padding: 9px 14px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .btn-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 22px;
+  }
+
+  /* Status messages */
+  .msg {
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    margin-top: 12px;
+    display: none;
+  }
+
+  .msg.show { display: block; }
+  .msg.success { background: rgba(74,222,128,0.1); border: 1px solid var(--green); color: var(--green); }
+  .msg.error { background: rgba(248,113,113,0.1); border: 1px solid var(--red); color: var(--red); }
+  .msg.info { background: rgba(108,138,255,0.1); border: 1px solid var(--accent); color: var(--accent); }
+
+  /* Summary */
+  .summary-table {
+    width: 100%;
+    font-size: 13px;
+    margin: 12px 0;
+  }
+
+  .summary-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .summary-row:last-child { border-bottom: none; }
+
+  .summary-label {
+    color: var(--text-dim);
+    font-size: 12px;
+  }
+
+  .summary-value {
+    font-weight: 500;
+    font-size: 13px;
+    text-align: right;
+    word-break: break-all;
+  }
+
+  .optional-badge {
+    display: inline-block;
+    font-size: 9px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    background: var(--surface2);
+    padding: 1px 6px;
+    border-radius: 3px;
+    margin-left: 6px;
+    font-weight: 400;
+    letter-spacing: 0.5px;
+  }
+
+  /* Success screen */
+  .success-screen {
+    text-align: center;
+    padding: 20px 0;
+  }
+
+  .success-icon {
+    font-size: 40px;
+    margin-bottom: 12px;
+  }
+
+  .success-screen h2 {
+    margin-bottom: 8px;
+  }
+
+  .success-screen p {
+    color: var(--text-dim);
+    font-size: 13px;
+    margin-bottom: 6px;
+  }
+
+  .spinner {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 2px solid var(--text-dim);
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    vertical-align: middle;
+    margin-right: 6px;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .existing-config-banner {
+    background: rgba(108,138,255,0.1);
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-bottom: 20px;
+    display: none;
+    text-align: center;
+  }
+
+  .existing-config-banner p {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+  }
+
+  .existing-config-banner .btn {
+    margin: 0 4px;
+  }
+</style>
+</head>
+<body>
+
+<div class="setup-container">
+  <div class="setup-header">
+    <svg width="100" height="60" viewBox="0 0 80 48" fill="none" style="margin-bottom:14px">
+      <defs>
+        <radialGradient id="sglow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#fff" stop-opacity="0.95"/>
+          <stop offset="15%" stop-color="#fef3c7" stop-opacity="0.85"/>
+          <stop offset="40%" stop-color="#fbbf24" stop-opacity="0.5"/>
+          <stop offset="70%" stop-color="#fb923c" stop-opacity="0.15"/>
+          <stop offset="100%" stop-color="#fb923c" stop-opacity="0"/>
+        </radialGradient>
+        <radialGradient id="shalo" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#fbbf24" stop-opacity="0.12"/>
+          <stop offset="100%" stop-color="#fbbf24" stop-opacity="0"/>
+        </radialGradient>
+        <linearGradient id="sflare" x1="0%" y1="50%" x2="100%" y2="50%">
+          <stop offset="0%" stop-color="#fbbf24" stop-opacity="0"/>
+          <stop offset="35%" stop-color="#fbbf24" stop-opacity="0.08"/>
+          <stop offset="50%" stop-color="#fef3c7" stop-opacity="0.35"/>
+          <stop offset="65%" stop-color="#fbbf24" stop-opacity="0.08"/>
+          <stop offset="100%" stop-color="#fbbf24" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <circle cx="40" cy="24" r="22" fill="url(#shalo)"/>
+      <ellipse cx="40" cy="24" rx="39" ry="1.8" fill="url(#sflare)"/>
+      <path d="M6 24 C16 8, 64 8, 74 24 C64 40, 16 40, 6 24 Z" stroke="#6c8aff" stroke-width="2.5" fill="rgba(108,138,255,0.06)" stroke-linejoin="round"/>
+      <circle cx="40" cy="24" r="13" fill="url(#sglow)"/>
+      <circle cx="40" cy="24" r="6" fill="#fbbf24"/>
+      <circle cx="40" cy="24" r="2.5" fill="#fef3c7" opacity="0.9"/>
+    </svg>
+    <h1>HueMonitor Setup</h1>
+    <p>Configure your Hue Bridge connection</p>
+  </div>
+
+  <div class="existing-config-banner" id="existingBanner">
+    <p>A configuration already exists. You can go to the dashboard or reconfigure below.</p>
+    <a href="/" class="btn btn-primary btn-small" onclick="goToDashboard(event)">Go to Dashboard</a>
+    <button class="btn btn-secondary btn-small" onclick="dismissBanner()">Reconfigure</button>
+  </div>
+
+  <div class="steps">
+    <div class="step-dot active" data-step="1"></div>
+    <div class="step-dot" data-step="2"></div>
+    <div class="step-dot" data-step="3"></div>
+    <div class="step-dot" data-step="4"></div>
+  </div>
+
+  <!-- Step 1: Bridge IP -->
+  <div class="step-card active" id="step1">
+    <h2>Bridge Connection</h2>
+    <p class="subtitle">Enter your Hue Bridge IP address or auto-discover it</p>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Bridge IP Address</label>
+        <input type="text" id="bridgeIp" placeholder="192.168.1.100">
+      </div>
+      <button class="btn btn-secondary btn-small" id="discoverBtn" onclick="discover()">Discover</button>
+    </div>
+    <div class="hint">Find this in the Hue app under Settings &gt; Hue Bridges</div>
+    <div class="msg" id="discoverMsg"></div>
+
+    <div class="btn-row">
+      <span></span>
+      <button class="btn btn-primary" onclick="goStep(2)">Next</button>
+    </div>
+  </div>
+
+  <!-- Step 2: API Key -->
+  <div class="step-card" id="step2">
+    <h2>API Key</h2>
+    <p class="subtitle">Generate a key automatically or paste an existing one</p>
+
+    <div class="instructions" style="margin-top:0">
+      <strong>Automatic:</strong> Press the link button on your Hue Bridge, then click Generate.
+    </div>
+    <button class="btn btn-primary" id="genKeyBtn" onclick="generateKey()" style="margin-bottom:14px">Generate API Key</button>
+    <div class="msg" id="genKeyMsg"></div>
+
+    <div class="field" style="margin-top:14px">
+      <label>API Key (or paste manually)</label>
+      <input type="text" id="apiKey" placeholder="Paste your API key or click Generate above">
+    </div>
+
+    <div class="hint">The API key is a long alphanumeric string like <code>6Rcqn...vFZ</code></div>
+
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="goStep(1)">Back</button>
+      <button class="btn btn-primary" onclick="goStep(3)">Next</button>
+    </div>
+  </div>
+
+  <!-- Step 3: Pushover (optional) -->
+  <div class="step-card" id="step3">
+    <h2>Push Notifications <span class="optional-badge">Optional</span></h2>
+    <p class="subtitle">Configure Pushover for mobile notifications. Skip if not needed.</p>
+
+    <div class="field">
+      <label>User Key</label>
+      <input type="text" id="pushoverUser" placeholder="Your Pushover user key">
+    </div>
+    <div class="field">
+      <label>API Token</label>
+      <input type="text" id="pushoverToken" placeholder="Your Pushover app token">
+    </div>
+    <div class="hint">Get your keys at <a href="https://pushover.net" target="_blank">pushover.net</a>. Leave both empty to skip.</div>
+
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="goStep(2)">Back</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary" onclick="goStep(4)">Skip</button>
+        <button class="btn btn-primary" onclick="goStep(4)">Next</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 4: Test & Save -->
+  <div class="step-card" id="step4">
+    <h2>Test &amp; Save</h2>
+    <p class="subtitle">Verify your connection and save the configuration</p>
+
+    <div class="summary-table" id="summary"></div>
+
+    <div class="field">
+      <label>Polling Interval (seconds)</label>
+      <input type="number" id="pollInterval" value="30" min="5" max="300" style="width:100px">
+    </div>
+    <div class="hint">How often to poll all sensors. Default: 30 seconds.</div>
+
+    <div style="margin-top:16px; display:flex; gap:8px">
+      <button class="btn btn-secondary" id="testBtn" onclick="testConnection()">Test Connection</button>
+    </div>
+    <div class="msg" id="testMsg"></div>
+
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="goStep(3)">Back</button>
+      <button class="btn btn-primary" id="saveBtn" onclick="saveConfig()" disabled>Save Configuration</button>
+    </div>
+  </div>
+
+  <!-- Step 5: Success -->
+  <div class="step-card" id="step5">
+    <div class="success-screen">
+      <div class="success-icon">&#x2705;</div>
+      <h2>Configuration Saved</h2>
+      <p>Restart HueMonitor to connect to your bridge.</p>
+      <div style="display:flex; gap:10px; justify-content:center; margin-top:18px">
+        <button class="btn btn-primary" id="setupRestartBtn" onclick="restartServer()">Restart Server</button>
+        <a href="/dashboard" class="btn btn-secondary" style="text-decoration:none">Go to Dashboard</a>
+      </div>
+      <div class="msg" id="setupRestartMsg" style="margin-top:10px"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  let currentStep = 1;
+
+  function $(id) { return document.getElementById(id); }
+
+  // Check if config already exists
+  async function checkExistingConfig() {
+    try {
+      const resp = await fetch('/api/settings');
+      const data = await resp.json();
+      if (data.bridge_ip && data.api_key) {
+        $('existingBanner').style.display = 'block';
+        // Pre-fill fields from existing config
+        $('bridgeIp').value = data.bridge_ip;
+        if (data.api_key) $('apiKey').value = data.api_key;
+        if (data.pushover_user_key) $('pushoverUser').value = data.pushover_user_key;
+        if (data.pushover_api_token) $('pushoverToken').value = data.pushover_api_token;
+      }
+    } catch (e) { /* no config yet, that's fine */ }
+  }
+  checkExistingConfig();
+
+  window.goToDashboard = function(e) {
+    e.preventDefault();
+    window.location.href = '/dashboard';
+  };
+
+  window.dismissBanner = function() {
+    $('existingBanner').style.display = 'none';
+  };
+
+  function goStep(n) {
+    // Validate before advancing
+    if (n > currentStep) {
+      if (currentStep === 1 && !$('bridgeIp').value.trim()) {
+        showMsg('discoverMsg', 'Please enter a Bridge IP address', 'error');
+        return;
+      }
+      if (currentStep === 2 && !$('apiKey').value.trim()) {
+        showMsg('testMsg', '', '');
+        $('apiKey').focus();
+        return;
+      }
+    }
+
+    currentStep = n;
+
+    // Update step dots
+    document.querySelectorAll('.step-dot').forEach(dot => {
+      const s = parseInt(dot.dataset.step);
+      dot.classList.remove('active', 'done');
+      if (s === n) dot.classList.add('active');
+      else if (s < n) dot.classList.add('done');
+    });
+
+    // Show active card
+    document.querySelectorAll('.step-card').forEach(c => c.classList.remove('active'));
+    $('step' + n).classList.add('active');
+
+    // Step-specific updates
+    if (n === 2) {
+      const ip = $('bridgeIp').value.trim();
+      const link = $('clipLink');
+      link.href = 'http://' + ip + '/debug/clip.html';
+      link.textContent = ip + '/debug/clip.html';
+    }
+
+    if (n === 4) {
+      buildSummary();
+      $('saveBtn').disabled = true;
+      hideMsg('testMsg');
+    }
+  }
+
+  function showMsg(id, text, type) {
+    const m = $(id);
+    m.textContent = text;
+    m.className = 'msg show ' + type;
+  }
+
+  function hideMsg(id) {
+    $(id).className = 'msg';
+  }
+
+  function buildSummary() {
+    const ip = $('bridgeIp').value.trim();
+    const key = $('apiKey').value.trim();
+    const pu = $('pushoverUser').value.trim();
+    const pt = $('pushoverToken').value.trim();
+    const hasPush = pu && pt;
+
+    let html = '';
+    html += row('Bridge IP', ip);
+    html += row('API Key', key.substring(0, 6) + '...' + key.substring(key.length - 4));
+    html += row('Pushover', hasPush ? 'Configured' : 'Not configured');
+    $('summary').innerHTML = html;
+  }
+
+  function row(label, value) {
+    return '<div class="summary-row"><span class="summary-label">' + label + '</span><span class="summary-value">' + value + '</span></div>';
+  }
+
+  window.goStep = goStep;
+
+  window.discover = async function() {
+    const btn = $('discoverBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Searching...';
+    hideMsg('discoverMsg');
+
+    try {
+      const resp = await fetch('/api/setup/discover');
+      const data = await resp.json();
+      if (data.success) {
+        $('bridgeIp').value = data.bridge_ip;
+        showMsg('discoverMsg', 'Found bridge at ' + data.bridge_ip, 'success');
+      } else {
+        showMsg('discoverMsg', data.error || 'No bridges found', 'error');
+      }
+    } catch (e) {
+      showMsg('discoverMsg', 'Discovery failed: ' + e.message, 'error');
+    }
+
+    btn.disabled = false;
+    btn.textContent = 'Discover';
+  };
+
+  window.generateKey = async function() {
+    const btn = $('genKeyBtn');
+    const ip = $('bridgeIp').value.trim();
+    if (!ip) {
+      showMsg('genKeyMsg', 'Enter a Bridge IP in Step 1 first', 'error');
+      return;
+    }
+    btn.disabled = true;
+    const maxAttempts = 15;
+    const interval = 2000;
+
+    for (let i = maxAttempts; i > 0; i--) {
+      btn.innerHTML = '<span class="spinner"></span>' + i + 's remaining...';
+      showMsg('genKeyMsg', 'Press the link button on your Hue Bridge now... (' + i * 2 + 's)', 'info');
+      try {
+        const resp = await fetch('/api/settings/generate-key', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bridge_ip: ip }),
+        });
+        const data = await resp.json();
+        if (data.success) {
+          $('apiKey').value = data.api_key;
+          showMsg('genKeyMsg', 'API key generated successfully!', 'success');
+          btn.disabled = false;
+          btn.textContent = 'Generate API Key';
+          return;
+        }
+      } catch (e) { /* retry */ }
+      await new Promise(r => setTimeout(r, interval));
+    }
+
+    showMsg('genKeyMsg', 'Timed out. Make sure you press the link button before clicking Generate.', 'error');
+    btn.disabled = false;
+    btn.textContent = 'Generate API Key';
+  };
+
+  window.testConnection = async function() {
+    const btn = $('testBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Testing...';
+    $('saveBtn').disabled = true;
+
+    try {
+      const resp = await fetch('/api/setup/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bridge_ip: $('bridgeIp').value.trim(),
+          api_key: $('apiKey').value.trim(),
+        }),
+      });
+      const data = await resp.json();
+      if (data.success) {
+        showMsg('testMsg', 'Connected to: ' + data.bridge_name + (data.sw_version ? ' (v' + data.sw_version + ')' : ''), 'success');
+        $('saveBtn').disabled = false;
+      } else {
+        showMsg('testMsg', data.error || 'Connection failed', 'error');
+      }
+    } catch (e) {
+      showMsg('testMsg', 'Test failed: ' + e.message, 'error');
+    }
+
+    btn.disabled = false;
+    btn.textContent = 'Test Connection';
+  };
+
+  window.saveConfig = async function() {
+    const btn = $('saveBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Saving...';
+
+    const payload = {
+      bridge_ip: $('bridgeIp').value.trim(),
+      api_key: $('apiKey').value.trim(),
+      polling_interval: parseInt($('pollInterval').value) || 30,
+    };
+
+    const pu = $('pushoverUser').value.trim();
+    const pt = $('pushoverToken').value.trim();
+    if (pu && pt) {
+      payload.pushover_user_key = pu;
+      payload.pushover_api_token = pt;
+    }
+
+    try {
+      const resp = await fetch('/api/setup/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await resp.json();
+      if (data.success) {
+        // Show success screen
+        document.querySelectorAll('.step-card').forEach(c => c.classList.remove('active'));
+        document.querySelectorAll('.step-dot').forEach(d => d.classList.add('done'));
+        $('step5').classList.add('active');
+      } else {
+        showMsg('testMsg', data.error || 'Save failed', 'error');
+        btn.disabled = false;
+        btn.textContent = 'Save Configuration';
+      }
+    } catch (e) {
+      showMsg('testMsg', 'Save failed: ' + e.message, 'error');
+      btn.disabled = false;
+      btn.textContent = 'Save Configuration';
+    }
+  };
+
+  window.restartServer = async function() {
+    const btn = $('setupRestartBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Restarting...';
+    showMsg('setupRestartMsg', 'Sending restart signal...', 'info');
+    try {
+      await fetch('/api/restart', { method: 'POST' });
+    } catch (e) { /* expected - server is shutting down */ }
+    showMsg('setupRestartMsg', 'Server is restarting. Redirecting to dashboard in 5s...', 'success');
+    setTimeout(function() { window.location.href = '/'; }, 5000);
+  };
+})();
+</script>
+</body>
+</html>
