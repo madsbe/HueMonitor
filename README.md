@@ -33,7 +33,7 @@ pip install -r requirements.txt
 python main.py web
 ```
 
-Open `http://localhost:8080` in your browser. If no configuration exists, the **setup wizard** will guide you through connecting to your Hue Bridge.
+Open your browser at the configured port (default `http://localhost:8080`, or as set in `config/settings.json`). If no configuration exists, the **setup wizard** will guide you through connecting to your Hue Bridge.
 
 ## Web Dashboard
 
