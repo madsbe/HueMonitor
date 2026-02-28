@@ -12,7 +12,8 @@ Real-time Philips Hue monitoring dashboard with sensor tracking, light control, 
 - **Auto-generated Alerts** — Alert rules created from discovered motion sensors on first run
 - **CLI Tools** — Sensor listing, monitoring, streaming, and logging from the command line
 - **Stats Dashboard** — Uptime, event counts, per-sensor breakdown, system status
-- **Synology NAS Support** — Ready for deployment on Synology NAS
+- **Password Protection** — Dashboard password required for all write operations
+- **Synology NAS Support** — One-command deployment via `deploy-synology.sh`
 
 ## Quick Start
 
@@ -33,7 +34,7 @@ pip install -r requirements.txt
 python main.py web
 ```
 
-Open your browser at the configured port (default `http://localhost:8080`, or as set in `config/settings.json`). If no configuration exists, the **setup wizard** will guide you through connecting to your Hue Bridge.
+Open your browser at the configured port (default `http://localhost:8008`, or as set in `config/settings.json`). If no configuration exists, the **setup wizard** will guide you through connecting to your Hue Bridge.
 
 ## Web Dashboard
 
@@ -103,7 +104,7 @@ Created automatically by the setup wizard, or manually:
   "polling_interval": 30,
   "web": {
     "host": "0.0.0.0",
-    "port": 8080
+    "port": 8008
   }
 }
 ```
@@ -151,13 +152,33 @@ HueMonitor/
 ├── logs/sensors/            # Sensor data logs by category
 ├── main.py                 # CLI entry point
 ├── start.sh                # Service management script (Synology/Linux)
+├── deploy-synology.sh      # One-command Synology NAS deployment
 ├── requirements.txt
 └── README.md
 ```
 
+## Password Protection
+
+All write operations (toggling lights, saving settings, restarting) require a dashboard password. The password is defined in `app/web.py` (`DASHBOARD_PASSWORD`). Users are prompted once per session.
+
 ## Synology NAS Deployment
 
-Use `start.sh` to manage HueMonitor as a service:
+### Quick Deploy (from Mac)
+
+```bash
+./deploy-synology.sh              # Full deploy (sync + install deps + start)
+./deploy-synology.sh sync         # Quick redeploy (sync + restart)
+./deploy-synology.sh stop         # Stop the app
+./deploy-synology.sh status       # Check if running
+./deploy-synology.sh logs         # Tail remote log
+./deploy-synology.sh ssh          # SSH into app directory
+```
+
+Requires `sshpass` (`brew install hudochenkov/sshpass/sshpass`). Edit the script header to configure host, user, path, and port.
+
+### Manual (start.sh)
+
+Use `start.sh` on the NAS to manage HueMonitor as a service:
 
 ```bash
 ./start.sh start     # Start in background
