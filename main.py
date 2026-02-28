@@ -239,7 +239,7 @@ def main():
     parser.add_argument("--host", type=str, default=None,
                         help="Web server host (default: from settings.json or 0.0.0.0)")
     parser.add_argument("--port", type=int, default=None,
-                        help="Web server port (default: from settings.json or 8080)")
+                        help="Web server port (default: from settings.json or 8008)")
     parser.add_argument("--log", type=str, default="motion",
                         help="Sensor categories to log: motion,temperature,light,switch,daylight (default: motion)")
 

@@ -768,6 +768,7 @@
       <circle cx="40" cy="24" r="2.5" fill="#fef3c7" opacity="0.9"/>
     </svg>
     <h1>HueMonitor</h1>
+    <span style="font-size:10px;color:var(--text-dim);margin-left:6px">v0.2.4</span>
   </div>
   <div class="status-badge">
     <span id="statusText">Connecting...</span>
@@ -959,7 +960,7 @@
             </div>
             <div class="settings-field" style="width:100px">
               <label>Port</label>
-              <input type="number" id="settPort" placeholder="8080" min="1" max="65535">
+              <input type="number" id="settPort" placeholder="8008" min="1" max="65535">
             </div>
             <div class="settings-field" style="width:100px">
               <label>Poll (sec)</label>
@@ -978,6 +979,19 @@
   </div>
 </div>
 
+<div id="passwordOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;width:300px;max-width:90vw">
+    <div style="font-size:14px;font-weight:600;margin-bottom:4px">Password Required</div>
+    <div style="font-size:11px;color:var(--text-dim);margin-bottom:12px">Enter the dashboard password to make changes.</div>
+    <input type="password" id="passwordInput" placeholder="Password" style="width:100%;padding:6px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px;outline:none;margin-bottom:6px">
+    <div id="passwordError" style="font-size:11px;color:var(--red);margin-bottom:8px;display:none"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button id="passwordCancel" style="padding:4px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text-dim);cursor:pointer;font-size:12px">Cancel</button>
+      <button id="passwordSubmit" style="padding:4px 12px;background:var(--accent);border:none;border-radius:4px;color:#fff;cursor:pointer;font-size:12px">Unlock</button>
+    </div>
+  </div>
+</div>
+
 <script>
 (function() {
   let ws = null;
@@ -987,6 +1001,80 @@
   let alertRules = {};
   let justSaved = null; // sensor name that was just toggled
   let pushoverEnabled = false;
+  let _sessionPassword = null; // cached password for this session
+
+  // --- Password Auth ---
+  function getPassword() {
+    return new Promise((resolve) => {
+      if (_sessionPassword) { resolve(_sessionPassword); return; }
+      const overlay = document.getElementById('passwordOverlay');
+      const input = document.getElementById('passwordInput');
+      const errEl = document.getElementById('passwordError');
+      const submitBtn = document.getElementById('passwordSubmit');
+      const cancelBtn = document.getElementById('passwordCancel');
+
+      overlay.style.display = 'flex';
+      input.value = '';
+      errEl.style.display = 'none';
+      input.focus();
+
+      function cleanup() {
+        overlay.style.display = 'none';
+        submitBtn.removeEventListener('click', onSubmit);
+        cancelBtn.removeEventListener('click', onCancel);
+        input.removeEventListener('keydown', onKey);
+      }
+
+      async function onSubmit() {
+        const pw = input.value;
+        if (!pw) { errEl.textContent = 'Password is required'; errEl.style.display = 'block'; return; }
+        submitBtn.disabled = true;
+        submitBtn.textContent = '...';
+        try {
+          const resp = await fetch('/api/auth/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: pw }),
+          });
+          if (resp.ok) {
+            _sessionPassword = pw;
+            cleanup();
+            resolve(pw);
+          } else {
+            const data = await resp.json().catch(() => ({}));
+            errEl.textContent = data.error || 'Incorrect password';
+            errEl.style.display = 'block';
+            input.select();
+          }
+        } catch (e) {
+          errEl.textContent = 'Connection error: ' + e.message;
+          errEl.style.display = 'block';
+        }
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Unlock';
+      }
+
+      function onCancel() { cleanup(); resolve(null); }
+      function onKey(e) { if (e.key === 'Enter') onSubmit(); else if (e.key === 'Escape') onCancel(); }
+
+      submitBtn.addEventListener('click', onSubmit);
+      cancelBtn.addEventListener('click', onCancel);
+      input.addEventListener('keydown', onKey);
+    });
+  }
+
+  async function authedFetch(url, options = {}) {
+    const pw = await getPassword();
+    if (pw === null) return null; // user cancelled
+    options.headers = options.headers || {};
+    options.headers['X-Dashboard-Password'] = pw;
+    const resp = await fetch(url, options);
+    if (resp.status === 403) {
+      _sessionPassword = null; // password was wrong or changed
+      return authedFetch(url, options); // re-prompt
+    }
+    return resp;
+  }
 
   // --- Tabs ---
   document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -1038,10 +1126,10 @@
 
   // --- Toggle API ---
   async function toggleAlert(sensorName, wrap) {
-    justSaved = sensorName;
     try {
-      const resp = await fetch('/api/alerts/toggle/' + encodeURIComponent(sensorName), { method: 'POST' });
-      if (resp.ok) showSavedFlash(wrap);
+      const resp = await authedFetch('/api/alerts/toggle/' + encodeURIComponent(sensorName), { method: 'POST' });
+      if (!resp) return; // cancelled
+      if (resp.ok) { justSaved = sensorName; showSavedFlash(wrap); }
     } catch (e) { console.error('Toggle error:', e); }
   }
 
@@ -1166,7 +1254,8 @@
 
   async function toggleLight(lightId, card) {
     try {
-      const resp = await fetch('/api/lights/' + encodeURIComponent(lightId) + '/toggle', { method: 'POST' });
+      const resp = await authedFetch('/api/lights/' + encodeURIComponent(lightId) + '/toggle', { method: 'POST' });
+      if (!resp) return; // cancelled
       if (!resp.ok) console.error('Toggle light error:', resp.status);
     } catch (e) {
       console.error('Toggle light error:', e);
@@ -1395,7 +1484,7 @@
       document.getElementById('settApiKeyMasked').textContent = data.api_key_masked || '--';
       document.getElementById('settBridgeIp').value = data.bridge_ip || '';
       document.getElementById('settHost').value = data.web_host || '0.0.0.0';
-      document.getElementById('settPort').value = data.web_port || 8080;
+      document.getElementById('settPort').value = data.web_port || 8008;
       document.getElementById('settPoll').value = data.polling_interval || 30;
     } catch (e) { console.error('Load settings error:', e); }
   }
@@ -1417,7 +1506,7 @@
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-sm"></span>Saving...';
     try {
-      const resp = await fetch('/api/settings/pushover', {
+      const resp = await authedFetch('/api/settings/pushover', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1425,11 +1514,11 @@
           api_token: document.getElementById('settPushToken').value.trim(),
         }),
       });
+      if (!resp) { btn.disabled = false; btn.textContent = 'Save'; return; }
       const data = await resp.json();
       if (data.success) {
         pushoverEnabled = data.enabled;
         settMsg('settPushMsg', data.enabled ? 'Saved — notifications enabled' : 'Saved — notifications disabled (keys cleared)', 'ok');
-        // Re-render alerts panel so toggles appear/disappear
         loadAlerts();
       } else {
         settMsg('settPushMsg', data.error || 'Save failed', 'err');
@@ -1444,7 +1533,7 @@
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-sm"></span>Sending...';
     try {
-      const resp = await fetch('/api/settings/pushover/test', {
+      const resp = await authedFetch('/api/settings/pushover/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1452,6 +1541,7 @@
           api_token: document.getElementById('settPushToken').value.trim(),
         }),
       });
+      if (!resp) { btn.disabled = false; btn.textContent = 'Test'; return; }
       const data = await resp.json();
       settMsg('settPushMsg', data.success ? 'Test notification sent!' : (data.error || 'Test failed'), data.success ? 'ok' : 'err');
     } catch (e) { settMsg('settPushMsg', 'Error: ' + e.message, 'err'); }
@@ -1463,6 +1553,9 @@
     const btn = document.getElementById('settGenKeyBtn');
     const ip = document.getElementById('settBridgeIp').value.trim();
     if (!ip) { settMsg('settKeyMsg', 'No bridge IP configured', 'err'); return; }
+    // Verify password upfront before starting the timed loop
+    const pw = await getPassword();
+    if (!pw) return;
     btn.disabled = true;
     const maxAttempts = 15;
     const interval = 2000;
@@ -1473,7 +1566,7 @@
       try {
         const resp = await fetch('/api/settings/generate-key', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'X-Dashboard-Password': pw },
           body: JSON.stringify({ bridge_ip: ip }),
         });
         const data = await resp.json();
@@ -1499,15 +1592,16 @@
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-sm"></span>Saving...';
     try {
-      const resp = await fetch('/api/settings/server', {
+      const resp = await authedFetch('/api/settings/server', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           host: document.getElementById('settHost').value.trim(),
-          port: parseInt(document.getElementById('settPort').value) || 8080,
+          port: parseInt(document.getElementById('settPort').value) || 8008,
           polling_interval: parseInt(document.getElementById('settPoll').value) || 30,
         }),
       });
+      if (!resp) { btn.disabled = false; btn.textContent = 'Save'; return; }
       const data = await resp.json();
       if (data.success) {
         settMsg('settRestartMsg', 'Saved. Restart to apply changes.', 'ok');
@@ -1525,7 +1619,8 @@
     btn.innerHTML = '<span class="spinner-sm"></span>Restarting...';
     settMsg('settRestartMsg', 'Sending restart signal...', 'info');
     try {
-      await fetch('/api/restart', { method: 'POST' });
+      const resp = await authedFetch('/api/restart', { method: 'POST' });
+      if (!resp) { btn.disabled = false; btn.textContent = 'Restart Server'; settMsg('settRestartMsg', '', ''); return; }
     } catch (e) { /* expected - server is shutting down */ }
     settMsg('settRestartMsg', 'Server is restarting. Reconnecting in 5s...', 'info');
     setTimeout(() => { window.location.reload(); }, 5000);

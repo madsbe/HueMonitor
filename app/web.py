@@ -9,8 +9,11 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import FileResponse, JSONResponse
+
+# Dashboard password — required before any changes are allowed
+DASHBOARD_PASSWORD = "SolInc2027"
 
 from app.bridge import HueBridge
 from app.sensors import SensorReader
@@ -122,6 +125,21 @@ def _has_required_settings():
         return bool(s.get("bridge_ip")) and bool(s.get("api_key"))
     except (json.JSONDecodeError, IOError):
         return False
+
+
+def _check_password(request_or_payload, payload=None):
+    """Check the X-Dashboard-Password header. Returns error response or None if OK."""
+    if isinstance(request_or_payload, Request):
+        pw = request_or_payload.headers.get("X-Dashboard-Password", "")
+    elif isinstance(request_or_payload, dict):
+        pw = request_or_payload.get("_password", "")
+    else:
+        pw = ""
+    if payload and isinstance(payload, dict):
+        pw = pw or payload.get("_password", "")
+    if pw != DASHBOARD_PASSWORD:
+        return JSONResponse({"error": "Invalid password"}, status_code=403)
+    return None
 
 
 def _run_event_stream(bridge_ip, api_key, logger, notifier, alert_manager):
@@ -318,6 +336,15 @@ def create_app():
 
     # --- Routes ---
 
+    @app.post("/api/auth/verify")
+    async def verify_password(request: Request):
+        """Verify the dashboard password."""
+        body = await request.json()
+        pw = body.get("password", "")
+        if pw == DASHBOARD_PASSWORD:
+            return {"success": True}
+        return JSONResponse({"success": False, "error": "Invalid password"}, status_code=403)
+
     @app.get("/")
     async def root():
         if not _has_required_settings():
@@ -353,8 +380,11 @@ def create_app():
         return result
 
     @app.post("/api/alerts/toggle/{sensor_name}")
-    async def toggle_alert(sensor_name: str):
+    async def toggle_alert(sensor_name: str, request: Request):
         """Toggle the enabled state of an alert by sensor name."""
+        err = _check_password(request)
+        if err:
+            return err
         alert_manager.alerts = alert_manager._load_config()
         found = False
         new_state = None
@@ -378,8 +408,11 @@ def create_app():
         return state.get_lights()
 
     @app.post("/api/lights/{light_id}/toggle")
-    async def toggle_light(light_id: str):
+    async def toggle_light(light_id: str, request: Request):
         """Toggle a light on/off."""
+        err = _check_password(request)
+        if err:
+            return err
         light_reader = LightReader(bridge)
         new_on = light_reader.toggle(light_id)
         if new_on is None:
@@ -471,7 +504,7 @@ def create_app():
             "api_key": key,
             "polling_interval": s.get("polling_interval", 30),
             "web_host": web.get("host", "0.0.0.0"),
-            "web_port": web.get("port", 8080),
+            "web_port": web.get("port", 8008),
             "pushover_user_key": pu_key,
             "pushover_user_key_masked": _mask(pu_key) if pu_key else "",
             "pushover_api_token": pu_token,
@@ -480,8 +513,12 @@ def create_app():
         }
 
     @app.post("/api/settings/pushover")
-    def save_pushover(payload: dict):
+    async def save_pushover(request: Request):
         """Save Pushover configuration."""
+        err = _check_password(request)
+        if err:
+            return err
+        payload = await request.json()
         user_key = payload.get("user_key", "").strip()
         api_token = payload.get("api_token", "").strip()
 
@@ -503,8 +540,12 @@ def create_app():
         return {"success": True, "enabled": notifier.enabled}
 
     @app.post("/api/settings/server")
-    def save_server_settings(payload: dict):
+    async def save_server_settings(request: Request):
         """Save web server host, port, and polling interval."""
+        err = _check_password(request)
+        if err:
+            return err
+        payload = await request.json()
         s = _load_settings()
         host = payload.get("host", "").strip()
         port = payload.get("port")
@@ -524,8 +565,12 @@ def create_app():
         return {"success": True, "message": "Server settings saved. Restart to apply."}
 
     @app.post("/api/settings/pushover/test")
-    def test_pushover(payload: dict):
+    async def test_pushover(request: Request):
         """Send a test Pushover notification."""
+        err = _check_password(request)
+        if err:
+            return err
+        payload = await request.json()
         user_key = payload.get("user_key", "").strip()
         api_token = payload.get("api_token", "").strip()
         if not user_key or not api_token:
@@ -543,11 +588,15 @@ def create_app():
             return {"success": False, "error": str(e)}
 
     @app.post("/api/settings/generate-key")
-    def generate_api_key(payload: dict):
+    async def generate_api_key(request: Request):
         """Generate a new API key from the Hue Bridge.
 
         The user must press the link button on the bridge first.
         """
+        err = _check_password(request)
+        if err:
+            return err
+        payload = await request.json()
         bridge_ip = payload.get("bridge_ip", "").strip()
         if not bridge_ip:
             # Use current config
@@ -577,8 +626,11 @@ def create_app():
             return {"success": False, "error": f"Connection failed: {e}"}
 
     @app.post("/api/restart")
-    async def restart_server_endpoint():
+    async def restart_server_endpoint(request: Request):
         """Restart the HueMonitor server process."""
+        err = _check_password(request)
+        if err:
+            return err
         import os
         import sys
         import signal
@@ -637,8 +689,12 @@ def create_app():
             return {"success": False, "error": f"Connection failed: {e}"}
 
     @app.post("/api/setup/save")
-    def setup_save(payload: dict):
+    async def setup_save(request: Request):
         """Save setup configuration."""
+        err = _check_password(request)
+        if err:
+            return err
+        payload = await request.json()
         bridge_ip = payload.get("bridge_ip", "").strip()
         api_key = payload.get("api_key", "").strip()
         if not bridge_ip or not api_key:
@@ -648,7 +704,7 @@ def create_app():
             "bridge_ip": bridge_ip,
             "api_key": api_key,
             "polling_interval": int(payload.get("polling_interval", 30)),
-            "web": {"host": "0.0.0.0", "port": 8080},
+            "web": {"host": "0.0.0.0", "port": 8008},
         }
 
         user_key = payload.get("pushover_user_key", "").strip()
@@ -669,7 +725,7 @@ def start_server(host=None, port=None):
     """Start the web server.
 
     If host/port are not provided, reads from config/settings.json web section.
-    Falls back to 0.0.0.0:8080 if nothing is configured.
+    Falls back to 0.0.0.0:8008 if nothing is configured.
     """
     import os
     import time
@@ -692,12 +748,12 @@ def start_server(host=None, port=None):
                 if host is None:
                     host = web.get("host", "0.0.0.0")
                 if port is None:
-                    port = web.get("port", 8080)
+                    port = web.get("port", 8008)
         except (json.JSONDecodeError, IOError):
             pass
 
     host = host or "0.0.0.0"
-    port = port or 8080
+    port = port or 8008
 
     app = create_app()
     uvicorn.run(app, host=host, port=port)

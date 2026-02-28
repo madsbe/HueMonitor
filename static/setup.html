@@ -501,11 +501,98 @@
   </div>
 </div>
 
+<div id="passwordOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;width:300px;max-width:90vw">
+    <div style="font-size:14px;font-weight:600;margin-bottom:4px">Password Required</div>
+    <div style="font-size:11px;color:var(--text-dim);margin-bottom:12px">Enter the dashboard password to make changes.</div>
+    <input type="password" id="passwordInput" placeholder="Password" style="width:100%;padding:6px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px;outline:none;margin-bottom:6px">
+    <div id="passwordError" style="font-size:11px;color:var(--red);margin-bottom:8px;display:none"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button id="passwordCancel" style="padding:4px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text-dim);cursor:pointer;font-size:12px">Cancel</button>
+      <button id="passwordSubmit" style="padding:4px 12px;background:var(--accent);border:none;border-radius:4px;color:#fff;cursor:pointer;font-size:12px">Unlock</button>
+    </div>
+  </div>
+</div>
+
 <script>
 (function() {
   let currentStep = 1;
+  let _sessionPassword = null;
 
   function $(id) { return document.getElementById(id); }
+
+  // --- Password Auth ---
+  function getPassword() {
+    return new Promise((resolve) => {
+      if (_sessionPassword) { resolve(_sessionPassword); return; }
+      const overlay = $('passwordOverlay');
+      const input = $('passwordInput');
+      const errEl = $('passwordError');
+      const submitBtn = $('passwordSubmit');
+      const cancelBtn = $('passwordCancel');
+
+      overlay.style.display = 'flex';
+      input.value = '';
+      errEl.style.display = 'none';
+      input.focus();
+
+      function cleanup() {
+        overlay.style.display = 'none';
+        submitBtn.removeEventListener('click', onSubmit);
+        cancelBtn.removeEventListener('click', onCancel);
+        input.removeEventListener('keydown', onKey);
+      }
+
+      async function onSubmit() {
+        const pw = input.value;
+        if (!pw) { errEl.textContent = 'Password is required'; errEl.style.display = 'block'; return; }
+        submitBtn.disabled = true;
+        submitBtn.textContent = '...';
+        try {
+          const resp = await fetch('/api/auth/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: pw }),
+          });
+          if (resp.ok) {
+            _sessionPassword = pw;
+            cleanup();
+            resolve(pw);
+          } else {
+            errEl.textContent = 'Incorrect password';
+            errEl.style.display = 'block';
+            input.select();
+          }
+        } catch (e) {
+          errEl.textContent = 'Connection error';
+          errEl.style.display = 'block';
+        }
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Unlock';
+      }
+
+      function onCancel() { cleanup(); resolve(null); }
+      function onKey(e) { if (e.key === 'Enter') onSubmit(); else if (e.key === 'Escape') onCancel(); }
+
+      submitBtn.addEventListener('click', onSubmit);
+      cancelBtn.addEventListener('click', onCancel);
+      input.addEventListener('keydown', onKey);
+    });
+  }
+
+  async function authedFetch(url, options) {
+    const pw = await getPassword();
+    if (pw === null) return null;
+    options = options || {};
+    options.headers = options.headers || {};
+    options.headers['X-Dashboard-Password'] = pw;
+    const resp = await fetch(url, options);
+    if (resp.status === 403) {
+      _sessionPassword = null;
+      return authedFetch(url, options);
+    }
+    return resp;
+  }
 
   // Check if config already exists
   async function checkExistingConfig() {
@@ -636,6 +723,8 @@
       showMsg('genKeyMsg', 'Enter a Bridge IP in Step 1 first', 'error');
       return;
     }
+    const pw = await getPassword();
+    if (!pw) return;
     btn.disabled = true;
     const maxAttempts = 15;
     const interval = 2000;
@@ -646,7 +735,7 @@
       try {
         const resp = await fetch('/api/settings/generate-key', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'X-Dashboard-Password': pw },
           body: JSON.stringify({ bridge_ip: ip }),
         });
         const data = await resp.json();
@@ -715,14 +804,14 @@
     }
 
     try {
-      const resp = await fetch('/api/setup/save', {
+      const resp = await authedFetch('/api/setup/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
+      if (!resp) { btn.disabled = false; btn.textContent = 'Save Configuration'; return; }
       const data = await resp.json();
       if (data.success) {
-        // Show success screen
         document.querySelectorAll('.step-card').forEach(c => c.classList.remove('active'));
         document.querySelectorAll('.step-dot').forEach(d => d.classList.add('done'));
         $('step5').classList.add('active');
@@ -744,7 +833,8 @@
     btn.innerHTML = '<span class="spinner"></span>Restarting...';
     showMsg('setupRestartMsg', 'Sending restart signal...', 'info');
     try {
-      await fetch('/api/restart', { method: 'POST' });
+      const resp = await authedFetch('/api/restart', { method: 'POST' });
+      if (!resp) { btn.disabled = false; btn.textContent = 'Restart Server'; return; }
     } catch (e) { /* expected - server is shutting down */ }
     showMsg('setupRestartMsg', 'Server is restarting. Redirecting to dashboard in 5s...', 'success');
     setTimeout(function() { window.location.href = '/'; }, 5000);
